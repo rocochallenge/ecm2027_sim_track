@@ -1,5 +1,7 @@
 # Singapore Embodied AI Challenge for Manufacturing
 
+**Official competition website:** [Singapore Embodied AI Challenge for Manufacturing](https://nrp.gov.sg/SGEAIchallenge/)
+
 **ECM — technical repository and participant guide**
 
 **Repository status:** Code, simulation assets, baseline policies, and datasets are pending upload. This README defines the proposed repository organization and documentation requirements for simulation platform collaborators. Paths below are proposed; replace all **TBD** entries and verify the examples against the released implementation before participant use.
