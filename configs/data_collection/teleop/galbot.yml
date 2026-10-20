@@ -1,0 +1,26 @@
+_base_:
+  - teleop_base
+robot: Galbot-Mobile
+teleop_device: vr-controller
+
+scene_backend: local
+task_backend: local
+task: ChamberServiceTask
+layout: robofinals/data/assets/Scene/scene04_1.usd
+enable_full_local_scene: true
+init_robot_base_pos: [0.60, -0.85, 0.0]
+init_robot_base_ori: [0.0, 0.0, 1.5707963267948966]
+
+resample_robot_placement_on_reset: false
+
+device: cpu
+num_envs: 1
+enable_cameras: true
+enable_multiple_viewports: true
+first_person_view: true
+record: true
+dataset_file: ./recordings/galbot.hdf5
+record_lerobot: false
+lerobot_robot_type: Galbot-Mobile
+# Use a fresh directory; do not resume an X7-sized dataset under the HDF5 stem folder.
+lerobot_dataset_root: null

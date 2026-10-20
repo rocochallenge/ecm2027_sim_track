@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+recordings/
+output/
+*.hdf5
+*.mcap
+eval_result/
+robofinals_logs/
+robofinals/data/assets/Scene/*_enabled.usd
