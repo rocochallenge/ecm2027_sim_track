@@ -69,6 +69,7 @@ parser.add_argument("--layout", type=str, default=None, help="layout name")
 parser.add_argument("--replay_all_clips", action="store_true", help="replay all clips, otherwise only replay the last clips")
 parser.add_argument("--record", action="store_true", default=False, help="record the replayed actions")
 parser.add_argument("--demo", type=int, default=-1, help="demo num in hdf5.")
+parser.add_argument("--disable_fabric", action="store_true", default=False, help="Disable Isaac Lab Fabric.")
 
 # append AppLauncher cli args
 AppLauncher.add_app_launcher_args(parser)
@@ -86,6 +87,35 @@ if args_cli.enable_pinocchio:
 
 if not args_cli.without_image:
     import cv2
+
+
+def _resolve_replay_scene(layout, env_args, project_root=None):
+    project_root = Path(project_root) if project_root is not None else Path(__file__).resolve().parents[4]
+
+    def existing_path(value):
+        if not value:
+            return None
+        path = Path(os.path.expandvars(os.path.expanduser(str(value))))
+        candidates = [path]
+        if not path.is_absolute():
+            candidates.append(project_root / path)
+        for candidate in candidates:
+            if candidate.is_file():
+                return str(candidate.resolve())
+        return None
+
+    if layout:
+        return existing_path(layout) or os.path.expanduser(layout)
+
+    recorded_scene = env_args.get("usd_path")
+    scene_name = env_args.get("scene_name")
+    resolved_recorded = existing_path(recorded_scene)
+    if resolved_recorded:
+        return resolved_recorded
+
+    resolved_scene_name = existing_path(scene_name)
+    return resolved_scene_name or recorded_scene or scene_name
+
 
 # launch the simulator
 app_launcher = AppLauncher(args_cli)
@@ -349,7 +379,9 @@ def main():
 
     env_args = json.loads(dataset_file_handler._hdf5_data_group.attrs["env_args"])
     usd_simplify = env_args.get("usd_simplify", False)
-    requested_scene = args_cli.layout or env_args.get("usd_path") or env_args.get("scene_name")
+    requested_scene = _resolve_replay_scene(args_cli.layout, env_args)
+    if not args_cli.layout and requested_scene != env_args.get("usd_path"):
+        print(f"[Replay] Using locally available scene: {requested_scene}")
     is_local_scene = str(env_args.get("scene_backend", "")).lower() == "local" or (
         isinstance(requested_scene, str) and requested_scene.endswith(".usd")
     )
@@ -459,8 +491,6 @@ def main():
     settings = carb.settings.get_settings()
     settings.set_bool("/rtx/raytracing/fractionalCutoutOpacity", True)
     env.reset(seed=env.cfg.seed)
-    if app_launcher._enable_cameras and not args_cli.headless:
-        teleop_interface.reset()
 
     active_camera_names = env.cfg.isaaclab_arena_env.embodiment.active_observation_camera_names
     num_cameras = len(active_camera_names)

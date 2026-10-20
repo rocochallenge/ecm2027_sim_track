@@ -9,3 +9,4 @@ output/
 eval_result/
 robofinals_logs/
 robofinals/data/assets/Scene/*_enabled.usd
+.deps/

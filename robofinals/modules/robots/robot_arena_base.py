@@ -178,6 +178,7 @@ class LwEmbodimentBase(EmbodimentBase):
     def __init__(self, enable_cameras: bool = False, initial_pose: Optional[Pose] = None):
         self.context = get_runtime_settings()
         super().__init__(enable_cameras, initial_pose)
+        self.active_observation_camera_names = []
         self.enable_cameras = self.context.enable_cameras
         self.init_robot_base_pos_anchor = self._as_pos_anchor(self.context.init_robot_base_pos)
         self.init_robot_base_ori_anchor = self._as_ori_anchor(self.context.init_robot_base_ori)
@@ -208,6 +209,7 @@ class LwEmbodimentBase(EmbodimentBase):
                         cam_info["camera_cfg"].height = render_resolution[1]
 
     def _setup_camera_config(self, task_type):
+        self.active_observation_camera_names = []
         for cam_name, cam_info in self.observation_cameras.items():
             if self.context.execute_mode in cam_info["execute_mode"]:
                 cam_info = self.observation_cameras[cam_name]
@@ -428,11 +430,6 @@ class LwEmbodimentBase(EmbodimentBase):
                     f"ori_rpy={self.init_robot_base_ori_anchor.tolist()} "
                     f"rot_xyzw={list(self.scene_config.robot.init_state.rot)}"
                 )
-            # Local backend needs the same camera-observation wiring as robocasa.
-            # Without this, cameras may exist in scene config but won't be merged
-            # into policy observations.
-            self.modify_observation_cameras(orchestrator.task.task_type)
-            self._setup_camera_config(orchestrator.task.task_type)
 
     def get_robot_anchor(self, orchestrator):
         (
