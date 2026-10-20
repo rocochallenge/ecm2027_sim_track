@@ -1,0 +1,149 @@
+{
+    "version": "1.0",
+    "file_records": [
+        {
+            "source_url": "C:/Users/Administrator/Downloads/RoCo_LW_Assets_20260828/Scene2_3/Scene1/Scene/testure/WireframeBlur_basecolor.png",
+            "source_hash": "54650d129d28bd143d034b8e3636924d0cd9dcc7",
+            "target_url": "./testure/WireframeBlur_basecolor.png",
+            "target_hash": "54650d129d28bd143d034b8e3636924d0cd9dcc7"
+        },
+        {
+            "source_url": "C:/Users/Administrator/Downloads/RoCo_LW_Assets_20260828/Scene2_3/Scene1/Scene/testure/Wireframe_blue.png",
+            "source_hash": "8ff273901f5886741c1b82f25d60d6b25c783e6a",
+            "target_url": "./testure/Wireframe_blue.png",
+            "target_hash": "8ff273901f5886741c1b82f25d60d6b25c783e6a"
+        },
+        {
+            "source_url": "C:/Users/Administrator/Downloads/RoCo_LW_Assets_20260828/Scene2_3/Table291/texture/T_Table291_BC001.png",
+            "source_hash": "8f0cedf96c5e218ccff60add4a87620c06746f3b",
+            "target_url": "./Table291/texture/T_Table291_BC001.png",
+            "target_hash": "8f0cedf96c5e218ccff60add4a87620c06746f3b"
+        },
+        {
+            "source_url": "C:/Users/Administrator/Downloads/RoCo_LW_Assets_20260828/Scene2_3/Table291/texture/T_Table291_N001.png",
+            "source_hash": "4fb3173926e2d1ece2a86797088e52e883d5fe24",
+            "target_url": "./Table291/texture/T_Table291_N001.png",
+            "target_hash": "4fb3173926e2d1ece2a86797088e52e883d5fe24"
+        },
+        {
+            "source_url": "C:/Users/Administrator/Downloads/RoCo_LW_Assets_20260828/Scene2_3/Table291/texture/T_Table291_ORM001.png",
+            "source_hash": "ae2cb0439a409cd165dd27446563bfd3121f9ac4",
+            "target_url": "./Table291/texture/T_Table291_ORM001.png",
+            "target_hash": "ae2cb0439a409cd165dd27446563bfd3121f9ac4"
+        },
+        {
+            "source_url": "C:/Users/Administrator/Downloads/RoCo_LW_Assets_20260828/Scene2_3/Chamber002/texture/T_Chamber002_BC001.png",
+            "source_hash": "8c84ce5faf3ff1c2222cd238724110eef419cab8",
+            "target_url": "./Chamber002/texture/T_Chamber002_BC001.png",
+            "target_hash": "8c84ce5faf3ff1c2222cd238724110eef419cab8"
+        },
+        {
+            "source_url": "C:/Users/Administrator/Downloads/RoCo_LW_Assets_20260828/Scene2_3/Chamber002/texture/T_Chamber002_N001.png",
+            "source_hash": "7a597407b7323d9c6639987697fe317edd53037f",
+            "target_url": "./Chamber002/texture/T_Chamber002_N001.png",
+            "target_hash": "7a597407b7323d9c6639987697fe317edd53037f"
+        },
+        {
+            "source_url": "C:/Users/Administrator/Downloads/RoCo_LW_Assets_20260828/Scene2_3/Chamber002/texture/T_Chamber002_ORM001.png",
+            "source_hash": "c4d0f4a8655d13c9c75e1e2420adb92cdfe4bfbd",
+            "target_url": "./Chamber002/texture/T_Chamber002_ORM001.png",
+            "target_hash": "c4d0f4a8655d13c9c75e1e2420adb92cdfe4bfbd"
+        },
+        {
+            "source_url": "C:/Users/Administrator/Downloads/RoCo_LW_Assets_20260828/Scene2_3/Box291/texture/T_Box291_BC001.png",
+            "source_hash": "8c42af9cfdaa3efde775fba548d4d98ebfd2d9d9",
+            "target_url": "./Box291/texture/T_Box291_BC001.png",
+            "target_hash": "8c42af9cfdaa3efde775fba548d4d98ebfd2d9d9"
+        },
+        {
+            "source_url": "C:/Users/Administrator/Downloads/RoCo_LW_Assets_20260828/Scene2_3/Box291/texture/T_Box291_N001.png",
+            "source_hash": "61d4eb6bdc7fb7ce26ee4a6c6fa5f46002259ec8",
+            "target_url": "./Box291/texture/T_Box291_N001.png",
+            "target_hash": "61d4eb6bdc7fb7ce26ee4a6c6fa5f46002259ec8"
+        },
+        {
+            "source_url": "C:/Users/Administrator/Downloads/RoCo_LW_Assets_20260828/Scene2_3/Box291/texture/T_Box291_ORM001.png",
+            "source_hash": "e731663fd5e70318ea564af26b9c4644b207820a",
+            "target_url": "./Box291/texture/T_Box291_ORM001.png",
+            "target_hash": "e731663fd5e70318ea564af26b9c4644b207820a"
+        },
+        {
+            "source_url": "C:/Users/Administrator/Downloads/RoCo_LW_Assets_20260828/Scene2_3/Chamber001/texture/T_Chamber001_BC001.png",
+            "source_hash": "81d2a4bc4891115001ee401320b293e638a241e3",
+            "target_url": "./Chamber001/texture/T_Chamber001_BC001.png",
+            "target_hash": "81d2a4bc4891115001ee401320b293e638a241e3"
+        },
+        {
+            "source_url": "C:/Users/Administrator/Downloads/RoCo_LW_Assets_20260828/Scene2_3/Chamber001/texture/T_Chamber001_N001.png",
+            "source_hash": "adf8360f821bfaa12ade72812ed6724065c9a43c",
+            "target_url": "./Chamber001/texture/T_Chamber001_N001.png",
+            "target_hash": "adf8360f821bfaa12ade72812ed6724065c9a43c"
+        },
+        {
+            "source_url": "C:/Users/Administrator/Downloads/RoCo_LW_Assets_20260828/Scene2_3/Chamber001/texture/T_Chamber001_ORM001.png",
+            "source_hash": "ecd253279ed66eb7860021456f3f8c264c40ed2c",
+            "target_url": "./Chamber001/texture/T_Chamber001_ORM001.png",
+            "target_hash": "ecd253279ed66eb7860021456f3f8c264c40ed2c"
+        },
+        {
+            "source_url": "C:/Users/Administrator/Downloads/RoCo_LW_Assets_20260828/Scene2_3/Scene1/Scene/Table283/Payload/Postprocess/DefaultPruneCollisions.usda",
+            "source_hash": "3a5d059e54cffc117f9d375acf8144869af4cf25",
+            "target_url": "./Table283/Payload/Postprocess/DefaultPruneCollisions.usda",
+            "target_hash": "3a5d059e54cffc117f9d375acf8144869af4cf25"
+        },
+        {
+            "source_url": "C:/Users/Administrator/Downloads/RoCo_LW_Assets_20260828/Scene2_3/Scene1/Scene/Table283/Payload/Postprocess/DefaultPruneJoints.usda",
+            "source_hash": "988704a05891c0159da711c29c38436902a5c50c",
+            "target_url": "./Table283/Payload/Postprocess/DefaultPruneJoints.usda",
+            "target_hash": "988704a05891c0159da711c29c38436902a5c50c"
+        },
+        {
+            "source_url": "C:/Users/Administrator/Downloads/RoCo_LW_Assets_20260828/Scene2_3/Scene1/Scene/Table283/Payload/Postprocess/DefaultPruneSites.usda",
+            "source_hash": "66c71541106f7157e23c2f11fd5d59facc9ca603",
+            "target_url": "./Table283/Payload/Postprocess/DefaultPruneSites.usda",
+            "target_hash": "66c71541106f7157e23c2f11fd5d59facc9ca603"
+        },
+        {
+            "source_url": "C:/Users/Administrator/Downloads/RoCo_LW_Assets_20260828/Scene2_3/Scene1/Scene/Table283/Payload/Postprocess/ProjectBeijing.usda",
+            "source_hash": "a6fe78f037bef76dbcb576d435242134bc1434e5",
+            "target_url": "./Table283/Payload/Postprocess/ProjectBeijing.usda",
+            "target_hash": "a6fe78f037bef76dbcb576d435242134bc1434e5"
+        },
+        {
+            "source_url": "C:/Users/Administrator/Downloads/RoCo_LW_Assets_20260828/Scene2_3/Scene1/Scene/Table283/Payload/Postprocess/ProjectNvidia.usda",
+            "source_hash": "02a27cff5fd0b66744babfe94201a197e79db11a",
+            "target_url": "./Table283/Payload/Postprocess/ProjectNvidia.usda",
+            "target_hash": "02a27cff5fd0b66744babfe94201a197e79db11a"
+        },
+        {
+            "source_url": "C:/Users/Administrator/Downloads/RoCo_LW_Assets_20260828/Scene2_3/Scene1/Scene/Table283/Payload/Postprocess/ProjectOld.usda",
+            "source_hash": "fcfe99bc21d352535904d638e8242726cf263411",
+            "target_url": "./Table283/Payload/Postprocess/ProjectOld.usda",
+            "target_hash": "fcfe99bc21d352535904d638e8242726cf263411"
+        },
+        {
+            "source_url": "C:/Users/Administrator/Downloads/RoCo_LW_Assets_20260828/Scene2_3/Scene1/Scene/Table283/Payload/Postprocess/ProjectShanghai.usda",
+            "source_hash": "59ec2c12b7b028e20ce71930d4cab50aa4db3c19",
+            "target_url": "./Table283/Payload/Postprocess/ProjectShanghai.usda",
+            "target_hash": "59ec2c12b7b028e20ce71930d4cab50aa4db3c19"
+        },
+        {
+            "source_url": "C:/Users/Administrator/Downloads/RoCo_LW_Assets_20260828/Scene2_3/Scene1/Scene/Table283/Payload/Textures/T_Table283_BC001.png",
+            "source_hash": "2bd65cf3055fea676d50eda3dc9a0bbea5f5e710",
+            "target_url": "./Table283/Payload/Textures/T_Table283_BC001.png",
+            "target_hash": "2bd65cf3055fea676d50eda3dc9a0bbea5f5e710"
+        },
+        {
+            "source_url": "C:/Users/Administrator/Downloads/RoCo_LW_Assets_20260828/Scene2_3/Scene1/Scene/Table283/Payload/Textures/T_Table283_N001.png",
+            "source_hash": "37e80ecb46a6c5e716947e7155d39394d6c820e6",
+            "target_url": "./Table283/Payload/Textures/T_Table283_N001.png",
+            "target_hash": "37e80ecb46a6c5e716947e7155d39394d6c820e6"
+        },
+        {
+            "source_url": "C:/Users/Administrator/Downloads/RoCo_LW_Assets_20260828/Scene2_3/Scene1/Scene/Table283/Payload/Textures/T_Table283_ORM001.png",
+            "source_hash": "e3649e457442e61fe092e948b8b1ab0a4ffba29c",
+            "target_url": "./Table283/Payload/Textures/T_Table283_ORM001.png",
+            "target_hash": "e3649e457442e61fe092e948b8b1ab0a4ffba29c"
+        }
+    ]
+}

@@ -1,0 +1,13 @@
+from __future__ import annotations
+
+from typing import Any, Protocol
+
+
+class EnvironmentPort(Protocol):
+    def reset(self, env_ids=None, *, seed: int | None = None) -> Any: ...
+
+    def reset_to(self, state: Any, env_ids=None, *, is_relative: bool = False) -> Any: ...
+
+    def step(self, action: Any) -> Any: ...
+
+    def close(self) -> None: ...

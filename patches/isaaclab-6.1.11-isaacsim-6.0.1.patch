@@ -1,0 +1,22 @@
+diff --git a/source/isaaclab/setup.py b/source/isaaclab/setup.py
+index 1fd4119..c6a59e2 100644
+--- a/source/isaaclab/setup.py
++++ b/source/isaaclab/setup.py
+@@ -36,7 +36,7 @@ INSTALL_REQUIRES = [
+     "warp-lang==1.13.0",
+     "matplotlib>=3.10.3",  # minimum version for Python 3.12 support
+     # make sure this is consistent with isaac sim version
+-    "pillow==12.1.1",
++    "pillow==12.2.0",
+     # required by omni.replicator.core S3 backend
+     "botocore",
+     # livestream
+@@ -47,7 +47,7 @@ INSTALL_REQUIRES = [
+     "pytest",
+     "pytest-mock",
+     "junitparser",
+-    "coverage==7.6.1",
++    "coverage==7.4.4",
+     "debugpy>=1.8.20",
+     "flatdict>=4.1.0",
+     "flaky",

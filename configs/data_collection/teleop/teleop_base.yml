@@ -1,0 +1,87 @@
+# =========================
+# Basic Settings
+# =========================
+disable_fabric: false
+num_envs: 1
+device: cpu
+sensitivity: 1.0
+step_hz: 50
+
+# =========================
+# Robot Settings
+# =========================
+robot: PandaOmron-Rel
+robot_scale: 1.0
+
+# =========================
+# Task & Scene Settings
+# =========================
+task: RobocasaBaseTask
+scene_backend: robocasa
+task_backend: robocasa
+debug_assets: null
+layout: robocasakitchen
+sources:
+  - objaverse
+  - lightwheel
+  - aigen_objs
+object_projects: []
+usd_simplify: false
+seed: 0
+
+# =========================
+# Data Collection Settings
+# =========================
+record: false
+dataset_file: ./datasets/dataset.hdf5
+num_demos: 1
+enable_debug_log: false
+continue_teleop_after_success: false
+
+# LeRobot v3 live export; other defaults in ``lerobot_isaac_export`` (``DEFAULT_*``).
+record_lerobot: false
+# Optional dataset directory; null => ``<dirname(dataset_file)>/<hdf5_stem>/``.
+lerobot_dataset_root: null
+# Subsample LeRobot frames during teleop (null => auto step_hz / lerobot_fps).
+lerobot_record_stride: 1
+lerobot_fps: 30
+
+# USD/OVD animation recording for teleop playback delivery.
+anim_recording_enabled: false
+anim_recording_start_time: 0
+anim_recording_stop_time: 999999
+anim_recording_warmup_steps: 8
+anim_recording_output_dir: null
+
+# =========================
+# Teleoperation Device Settings
+# =========================
+enable_pinocchio: false
+teleop_device: keyboard
+relative_control: false
+first_person_view: false
+enable_rendering_optimization: true
+enable_multiple_viewports: false
+action_delay_async: false
+action_delay_time_s: 0
+action_delay_type: fixed
+action_buffer_size: 100
+robot_to_fixture_dist: 0.5
+
+
+# =========================
+# Video Saving Settings
+# =========================
+enable_cameras: false
+save_video: false
+video_save_dir: ./videos
+video_fps: 30
+
+# =========================
+# Object Placement Retry Settings
+# =========================
+max_scene_retry: 4
+max_object_placement_retry: 3
+
+resample_objects_placement_on_reset: true
+resample_robot_placement_on_reset: true

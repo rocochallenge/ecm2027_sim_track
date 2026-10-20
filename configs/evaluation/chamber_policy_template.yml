@@ -1,0 +1,18 @@
+policy_name: my_chamber_policy:MyPolicy
+checkpoint: /absolute/path/to/checkpoint
+test_num: 1
+time_out_limit: 100
+instruction: Service the chamber
+env_cfg:
+  task: ChamberServiceTask
+  scene_backend: local
+  task_backend: local
+  robot: Galbot-Mobile
+  layout: robofinals/data/assets/Scene/scene04_1.usd
+  enable_full_local_scene: true
+  physics_backend: physx
+  device: cpu
+  num_envs: 1
+  rl: null
+  sources: []
+  object_projects: []

@@ -1,0 +1,4 @@
+record: True
+json_path: ./metrics.json
+ymax: 140
+ymin: 0

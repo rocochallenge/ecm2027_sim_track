@@ -1,0 +1,10 @@
+*.usd filter=lfs diff=lfs merge=lfs -text
+*.usda filter=lfs diff=lfs merge=lfs -text
+*.usdc filter=lfs diff=lfs merge=lfs -text
+*.sh text eol=lf
+robofinals/data/assets/Scene/**/*.png filter=lfs diff=lfs merge=lfs -text
+robofinals/data/assets/Scene/**/*.jpg filter=lfs diff=lfs merge=lfs -text
+robofinals/data/assets/Scene/**/*.jpeg filter=lfs diff=lfs merge=lfs -text
+robofinals/data/assets/roco_chamber_service/**/*.png filter=lfs diff=lfs merge=lfs -text
+robofinals/data/assets/roco_chamber_service/**/*.jpg filter=lfs diff=lfs merge=lfs -text
+robofinals/data/assets/roco_chamber_service/**/*.jpeg filter=lfs diff=lfs merge=lfs -text
