@@ -207,7 +207,7 @@ class GalbotEnvCfg(LwEmbodimentBase):
                     update_period=1.0 / 30.0,
                 ),
                 "tags": [],
-                "execute_mode": [ExecuteMode.TELEOP, ExecuteMode.REPLAY_STATE, ExecuteMode.REPLAY_ACTION, ExecuteMode.REPLAY_JOINT_TARGETS],
+                "execute_mode": [ExecuteMode.TELEOP, ExecuteMode.REPLAY_STATE, ExecuteMode.REPLAY_ACTION, ExecuteMode.REPLAY_JOINT_TARGETS, ExecuteMode.EVAL],
             },
             "left_hand_camera": {
                 "camera_cfg": TiledCameraCfg(
@@ -229,7 +229,7 @@ class GalbotEnvCfg(LwEmbodimentBase):
                     update_period=0.05,
                 ),
                 "tags": [],
-                "execute_mode": [ExecuteMode.TELEOP, ExecuteMode.REPLAY_STATE, ExecuteMode.REPLAY_ACTION, ExecuteMode.REPLAY_JOINT_TARGETS],
+                "execute_mode": [ExecuteMode.TELEOP, ExecuteMode.REPLAY_STATE, ExecuteMode.REPLAY_ACTION, ExecuteMode.REPLAY_JOINT_TARGETS, ExecuteMode.EVAL],
             },
             "right_hand_camera": {
                 "camera_cfg": TiledCameraCfg(
@@ -251,7 +251,7 @@ class GalbotEnvCfg(LwEmbodimentBase):
                     update_period=0.05,
                 ),
                 "tags": [],
-                "execute_mode": [ExecuteMode.TELEOP, ExecuteMode.REPLAY_STATE, ExecuteMode.REPLAY_ACTION, ExecuteMode.REPLAY_JOINT_TARGETS],
+                "execute_mode": [ExecuteMode.TELEOP, ExecuteMode.REPLAY_STATE, ExecuteMode.REPLAY_ACTION, ExecuteMode.REPLAY_JOINT_TARGETS, ExecuteMode.EVAL],
             },
         }
         self.action_config = MobileActionsCfg() if mobile else ActionsCfg()
