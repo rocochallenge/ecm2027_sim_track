@@ -61,6 +61,32 @@ def _prepare_config(config):
     return config
 
 
+def _load_policy_class(policy_name):
+    """Load a policy class from ``module:Class`` or the legacy class name.
+
+    The explicit module form keeps customer policy packages independent from
+    the simulator checkout.  The legacy form remains supported for existing
+    configurations that define the class in the local ``policy`` module.
+    """
+    module_name, separator, class_name = str(policy_name).partition(":")
+    if separator:
+        if not module_name or not class_name:
+            raise ValueError(
+                "policy_name must use the form 'module:Class' when ':' is present"
+            )
+    else:
+        module_name = "policy"
+        class_name = str(policy_name)
+
+    policy_module = importlib.import_module(module_name)
+    try:
+        return getattr(policy_module, class_name)
+    except AttributeError as exc:
+        raise AttributeError(
+            f"Policy class {class_name!r} was not found in module {module_name!r}"
+        ) from exc
+
+
 # add argparse arguments
 # Get project root directory (assuming script is in robofinals/scripts/policy/)
 script_dir = Path(__file__).parent
@@ -157,11 +183,7 @@ def main(usr_args):
             if key not in env_cfg:
                 env_cfg[key] = value
     policy_name = usr_args["policy_name"]
-    module_name, separator, class_name = policy_name.partition(":")
-    if not separator:
-        raise ValueError("policy_name must be an import path such as my_policy:MyPolicy")
-    policy_module = importlib.import_module(module_name)
-    policy_class = getattr(policy_module, class_name)
+    policy_class = _load_policy_class(policy_name)
     policy = policy_class(usr_args)
 
     eval_meta = env.attach(env_cfg)
