@@ -92,7 +92,12 @@ class BasePolicy(ABC):
             # action = action.squeeze(0)
             action = action[..., usr_args['joint_mapping']]
 
-        obs, _, terminated, _, extras = task_env.step(action)
+        transition = task_env.step(action)
+        if isinstance(transition, (tuple, list)) and len(transition) == 3:
+            obs, terminated, _truncated = transition
+            extras = {}
+        else:
+            obs, _, terminated, _, extras = transition
         # Return the raw per-env termination signal. Callers that only need a
         # scalar can reduce it (e.g. GR00T uses _to_terminated_flag); batched
         # callers (multi-env eval) need the per-env values.

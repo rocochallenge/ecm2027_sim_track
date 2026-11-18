@@ -17,6 +17,7 @@
 """Launch Isaac Sim Simulator first."""
 
 import argparse
+import json
 import random
 from functools import partial
 
@@ -47,6 +48,12 @@ parser.add_argument("--rtsp_mount_prefix", type=str, default="/env", help="RTSP 
 parser.add_argument("--rtsp_advertise_host", type=str, default=None, help="Hostname/IP advertised in stream URLs")
 parser.add_argument("--rtsp_max_streams", type=int, default=None, help="Cap number of streams (default: all envs)")
 parser.add_argument("--rtsp_bitrate", type=str, default="4M", help="FFmpeg video bitrate, e.g. 4M, 8M, 10M")
+parser.add_argument(
+    "--eval_metrics_path",
+    type=str,
+    default="./eval_result/chamber_service_metrics.json",
+    help="Simulator-side JSON path for final task success and score metrics.",
+)
 parser.add_argument(
     "--anim_recording_output_dir",
     type=str,
@@ -118,6 +125,17 @@ def _shutdown_env_server(env_server):
     """Bake OVD animation (if enabled) before tearing down the sim."""
     global _attached_env
     env = getattr(env_server, "_env", None) or _attached_env
+    metrics_path = getattr(args_cli, "eval_metrics_path", None)
+    if env is not None and metrics_path:
+        try:
+            task = env.cfg.isaaclab_arena_env.task
+            metrics = task.get_checker_results()
+            os.makedirs(os.path.dirname(metrics_path) or ".", exist_ok=True)
+            with open(metrics_path, "w", encoding="utf-8") as handle:
+                json.dump(metrics, handle, indent=2, ensure_ascii=False, default=str)
+            print(f"[env_server] Saved simulator-side evaluation metrics to {metrics_path}", flush=True)
+        except Exception as exc:
+            print(f"[env_server] WARNING: could not save evaluation metrics: {exc}", flush=True)
     if getattr(args_cli, "anim_recording_enabled", False):
         runtime = getattr(env, "backend_runtime", None)
         if runtime is not None:
@@ -191,8 +209,9 @@ def make_env_cfg(cfg):
         )
 
     env_cfg.observations.policy.concatenate_terms = cfg.concatenate_terms
-    # modify configuration
-    env_cfg.terminations.time_out = None
+    # Keep task-defined simulation timeouts. ChamberServiceTask sets its
+    # benchmark limit to 900 simulation seconds; the policy loop may stop
+    # earlier, but the environment remains the authority for hard timeout.
     # override configurations with non-hydra CLI arguments
     env_cfg.scene.num_envs = cfg.num_envs if cfg.num_envs is not None else env_cfg.scene.num_envs
     env_cfg.sim.device = cfg.device if cfg.device is not None else env_cfg.sim.device

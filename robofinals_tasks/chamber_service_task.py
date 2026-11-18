@@ -12,6 +12,8 @@ from robofinals.data import robofinals_DATA_PATH
 import robofinals.utils.object_utils as OU
 from robofinals_tasks.lightwheel_home_tasks.home_base_task import HomeBaseTask
 from robofinals.core.models.fixtures.fixture_types import FixtureType
+from robofinals.utils.env import ExecuteMode
+from robofinals.utils.place_utils.env_utils import sample_robot_base_helper
 
 
 class ChamberServiceTaskAssets(Asset):
@@ -86,10 +88,16 @@ class ChamberServiceTask(HomeBaseTask):
     pairwise_contacts = (("spongebody", "chamber"),)
 
     LID_OPEN_THRESHOLD = 0.4
-    SPONGE_CHAMBER_CONTACTS_REQUIRED = 3
+    SPONGE_CHAMBER_CONTACTS_REQUIRED = 5
     SPONGE_CHAMBER_CONTACT_DURATION_S = 0.5
     BOX_PLACEMENT_THRESHOLD = 0.15
     CHAMBER_PLACEMENT_THRESHOLD = 0.4
+    ROBOT_RESET_POS_DEV_X = 0.10
+    ROBOT_RESET_POS_DEV_Y = 0.10
+    # About +/- 29 degrees, large enough to be visible while keeping the
+    # robot facing the same work area.
+    ROBOT_RESET_YAW_DEV = 0.50
+    STAGE_SCORE = 5
 
     success_stages = (
         "1. Lift off chamber top",
@@ -124,7 +132,8 @@ class ChamberServiceTask(HomeBaseTask):
 
     def modify_env_cfg(self, env_cfg):
         env_cfg = super().modify_env_cfg(env_cfg)
-        env_cfg.episode_length_s = 300.0
+        # Benchmark timeout, measured in simulation seconds.
+        env_cfg.episode_length_s = 15.0 * 60.0
         # env_cfg.viewer.eye = (2.6, -3.0, 2.1)
         # env_cfg.viewer.lookat = (0.0, 0.0, 0.55)
         return env_cfg
@@ -152,7 +161,40 @@ class ChamberServiceTask(HomeBaseTask):
         self._task_assets = ChamberServiceTaskAssets()
         self._task_assets.resample_sponge_init_state(self.rng)
         self.add_asset(self._task_assets)
-        return super().setup_env_config(orchestrator)
+        result = super().setup_env_config(orchestrator)
+        # Use the same randomized reset distribution for collection and eval.
+        self.resample_robot_placement_on_reset = True
+        return result
+
+    def sample_robot_base_reset_pose(self, env, env_ids, orchestrator):
+        """Return a collision-free random base pose around the task anchor."""
+        anchor_pos = np.asarray(
+            self.init_robot_base_pos
+            if self.init_robot_base_pos is not None
+            else orchestrator.embodiment.init_robot_base_pos_anchor,
+            dtype=np.float32,
+        )
+        anchor_ori = np.asarray(
+            self.init_robot_base_ori
+            if self.init_robot_base_ori is not None
+            else orchestrator.embodiment.init_robot_base_ori_anchor,
+            dtype=np.float32,
+        )
+        robot_pos = sample_robot_base_helper(
+            env=env,
+            anchor_pos=anchor_pos,
+            anchor_ori=anchor_ori,
+            rot_dev=self.ROBOT_RESET_YAW_DEV,
+            pos_dev_x=self.ROBOT_RESET_POS_DEV_X,
+            pos_dev_y=self.ROBOT_RESET_POS_DEV_Y,
+            env_ids=env_ids,
+            # The helper intentionally fixes EVAL poses for generic tasks. This
+            # task requires eval and data collection to share the distribution.
+            execute_mode=ExecuteMode.TELEOP,
+        )
+        robot_ori = anchor_ori.copy()
+        robot_ori[2] += float(self.rng.uniform(-self.ROBOT_RESET_YAW_DEV, self.ROBOT_RESET_YAW_DEV))
+        return robot_pos.tolist(), robot_ori.tolist()
 
     def _setup_scene(self, env, env_ids=None):
         super()._setup_scene(env, env_ids)
@@ -194,7 +236,10 @@ class ChamberServiceTask(HomeBaseTask):
     def _complete_stage(self, stage_idx: int, condition: torch.Tensor) -> None:
         newly_done = condition & ~self._stage_flags[:, stage_idx]
         self._stage_flags[:, stage_idx] |= condition
-        self._process_score += newly_done.long()
+        # Wiping is scored per completed face below; the other stages are
+        # worth five points when their success flag first becomes true.
+        if stage_idx != 3:
+            self._process_score += newly_done.long() * self.STAGE_SCORE
 
     def _lid_open(self, env) -> torch.Tensor:
         if self.chamber is None:
@@ -255,6 +300,7 @@ class ChamberServiceTask(HomeBaseTask):
             & ~self._sponge_chamber_contact_qualified
         )
         self._sponge_chamber_contact_count += newly_qualified.long()
+        self._process_score += newly_qualified.long()
         self._sponge_chamber_contact_qualified = torch.where(
             contact_now,
             self._sponge_chamber_contact_qualified | newly_qualified,
@@ -312,6 +358,11 @@ class ChamberServiceTask(HomeBaseTask):
         return {
             "process_score": int(self._process_score.max().item()),
             "process_score_per_env": self._process_score.detach().cpu().tolist(),
+            "max_score": (len(self._stage_names) - 1) * self.STAGE_SCORE + self.SPONGE_CHAMBER_CONTACTS_REQUIRED,
+            "wipe_faces_completed_per_env": torch.minimum(
+                self._sponge_chamber_contact_count,
+                torch.full_like(self._sponge_chamber_contact_count, self.SPONGE_CHAMBER_CONTACTS_REQUIRED),
+            ).detach().cpu().tolist(),
             "completed_stages": completed,
         }
 

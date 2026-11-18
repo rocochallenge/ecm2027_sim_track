@@ -180,6 +180,13 @@ class LwBaseOrchestrator(OrchestratorBase, NoDeepcopyMixin):
         return object_placements, updated_obj_names
 
     def sample_robot_base(self, env, env_ids=None):
+        custom_sampler = getattr(self.task, "sample_robot_base_reset_pose", None)
+        if callable(custom_sampler):
+            robot_pos, robot_ori = custom_sampler(env, env_ids, self)
+            self.init_robot_base_pos = robot_pos
+            self.init_robot_base_ori = robot_ori
+            return
+
         # set the robot here
         ep_meta = self.get_ep_meta()
         robot_pos = ep_meta.get("init_robot_base_pos")
