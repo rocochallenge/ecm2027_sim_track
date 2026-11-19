@@ -21,6 +21,7 @@ import contextlib
 import importlib
 import json
 import os
+import signal
 import sys
 import numpy as np
 import tqdm
@@ -87,6 +88,32 @@ def _load_policy_class(policy_name):
         ) from exc
 
 
+class PolicyProcessTimeout(TimeoutError):
+    """Raised when a policy process exceeds its wall-clock safety limit."""
+
+
+def _install_policy_watchdog(timeout_s):
+    """Install a main-thread watchdog and return a cancellation callback."""
+    timeout_s = float(timeout_s or 0.0)
+    if timeout_s <= 0 or not hasattr(signal, "setitimer"):
+        return lambda: None
+
+    def _raise_timeout(_signum, _frame):
+        raise PolicyProcessTimeout(
+            f"policy evaluation exceeded wall-clock limit of {timeout_s:g} seconds"
+        )
+
+    previous_handler = signal.getsignal(signal.SIGALRM)
+    signal.signal(signal.SIGALRM, _raise_timeout)
+    signal.setitimer(signal.ITIMER_REAL, timeout_s)
+
+    def _cancel():
+        signal.setitimer(signal.ITIMER_REAL, 0.0)
+        signal.signal(signal.SIGALRM, previous_handler)
+
+    return _cancel
+
+
 # add argparse arguments
 # Get project root directory (assuming script is in robofinals/scripts/policy/)
 script_dir = Path(__file__).parent
@@ -151,98 +178,78 @@ def parse_args_and_config():
 
 
 def main(usr_args):
+    env = None
+    policy = None
+    cancel_watchdog = _install_policy_watchdog(usr_args.get("policy_process_timeout_s", 900))
+    try:
+        from robofinals.distributed.proxy import RemoteEnv
+        from robofinals.distributed.restful import DotDict
 
-    from robofinals.distributed.proxy import RemoteEnv
-    env = RemoteEnv.make(address=('127.0.0.1', 50000), authkey=b'lightwheel')
-    from robofinals.distributed.restful import DotDict
-    if "env_cfg" in usr_args and usr_args["env_cfg"]:
-        env_cfg = DotDict(usr_args["env_cfg"])
+        env = RemoteEnv.make(address=("127.0.0.1", 50000), authkey=b"lightwheel")
+        env_cfg = DotDict(usr_args.get("env_cfg") or {})
         defaults = {
-            "scene_backend": "robocasa",
-            "task_backend": "robocasa",
-            "device": "cuda:0",
-            "robot_scale": 1.0,
-            "first_person_view": False,
-            "disable_fabric": False,
-            "num_envs": 1,
-            "usd_simplify": False,
-            "video": False,
-            "for_rl": False,
-            "variant": "Visual",
-            "concatenate_terms": False,
-            "distributed": False,
-            "physics_backend": None,
-            "seed": 42,
-            "sources": None,
-            "object_projects": None,
-            "execute_mode": "eval",
-            "replay_cfgs": {"add_camera_to_observation": True},
+            "scene_backend": "robocasa", "task_backend": "robocasa",
+            "device": "cuda:0", "robot_scale": 1.0, "first_person_view": False,
+            "disable_fabric": False, "num_envs": 1, "usd_simplify": False,
+            "video": False, "for_rl": False, "variant": "Visual",
+            "concatenate_terms": False, "distributed": False, "physics_backend": None,
+            "seed": 42, "sources": None, "object_projects": None,
+            "execute_mode": "eval", "replay_cfgs": {"add_camera_to_observation": True},
             "enable_full_local_scene": False,
         }
         for key, value in defaults.items():
             if key not in env_cfg:
                 env_cfg[key] = value
-    policy_name = usr_args["policy_name"]
-    policy_class = _load_policy_class(policy_name)
-    policy = policy_class(usr_args)
 
-    eval_meta = env.attach(env_cfg)
-    usr_args['actions_dim'] = eval_meta['actions_dim']
-    usr_args['decimation'] = eval_meta['decimation']
+        policy_class = _load_policy_class(usr_args["policy_name"])
+        policy = policy_class(usr_args)
+        eval_meta = env.attach(env_cfg)
+        usr_args["actions_dim"] = eval_meta["actions_dim"]
+        usr_args["decimation"] = eval_meta["decimation"]
+        if usr_args.get("eval_initial_states_path"):
+            raise ValueError(
+                "eval_initial_states_path is not supported by the restricted policy protocol; "
+                "initial states must be selected by the simulator-side evaluator."
+            )
 
-    eval_initial_states_path = usr_args.get("eval_initial_states_path", None)
-    if eval_initial_states_path:
-        raise ValueError(
-            "eval_initial_states_path is not supported by the restricted policy protocol; "
-            "initial states must be selected by the simulator-side evaluator."
-        )
-
-    ori_test_num = usr_args.get('test_num', 10)  # default 10
-    test_num = ori_test_num
-
-    # Each env runs an independent episode, so one batched rollout evaluates
-    # ``num_envs`` episodes at once. Run enough batches to cover ``test_num``.
-    num_envs = max(1, int(usr_args.get("env_cfg", {}).get("num_envs", 1)))
-    num_batches = (test_num + num_envs - 1) // num_envs
-
-    # Optional: record the initial pose of selected objects for each episode,
-    # written in the put_bottles.json format ({"worlds": [[{object_name, pose,
-    # scale}, ...], ...]}). Enabled by ``record_initial_states`` in the config.
-    eval_results = []
-    episodes_done = 0
-    with (
-        contextlib.suppress(KeyboardInterrupt),  # and torch.inference_mode(),
-    ):
+        test_num = usr_args.get("test_num", 10)
+        num_envs = max(1, int(env_cfg.get("num_envs", 1)))
+        num_batches = (test_num + num_envs - 1) // num_envs
+        eval_results = []
+        episodes_done = 0
         for batch_idx in tqdm.tqdm(range(num_batches)):
-            record_video = usr_args.get("record_video", usr_args.get("env_cfg", {}).get("video", False))
+            record_video = usr_args.get("record_video", env_cfg.get("video", False))
             eval_video_path = Path(f"./eval_result/test_{batch_idx}/record_video.mp4") if record_video else None
             if eval_video_path is not None:
                 eval_video_path.parent.mkdir(parents=True, exist_ok=True)
-
-            usr_args['save_path'] = f"./eval_result/test_{batch_idx}"
-            video_context = contextlib.nullcontext(eval_video_path)
-            with video_context as v:
+            usr_args["save_path"] = f"./eval_result/test_{batch_idx}"
+            with contextlib.nullcontext(eval_video_path) as video_path:
                 obs, _reset_info = env.reset()
-
                 policy.reset_model()
-                result = policy.eval(env, obs, usr_args, v)
+                result = policy.eval(env, obs, usr_args, video_path)
                 eval_results.append(result)
                 if getattr(policy, "_video_writer", None) is not None:
                     policy._video_writer.__exit__(None, None, None)
                     policy._video_writer = None
+            take = min(num_envs, test_num - episodes_done)
+            episodes_done += take
+            print(f"Batch {batch_idx}: finished {take}. Total tested: {episodes_done}/{test_num}")
 
-                take = min(num_envs, test_num - episodes_done)
-                episodes_done += take
-                print(f"Batch {batch_idx}: finished {take}. Total tested: {episodes_done}/{test_num}")
-    final_results = policy.format_eval_results(eval_results, usr_args, episodes_done)
-    print(f"Eval results: {final_results}")
-
-    result_path = Path("./eval_result/eval_results.json")
-    result_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(result_path, "w", encoding="utf-8") as f:
-        json.dump(final_results, f, indent=4, ensure_ascii=False)
-
-    env.close()
+        final_results = policy.format_eval_results(eval_results, usr_args, episodes_done)
+        print(f"Eval results: {final_results}")
+        result_path = Path("./eval_result/eval_results.json")
+        result_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(result_path, "w", encoding="utf-8") as f:
+            json.dump(final_results, f, indent=4, ensure_ascii=False)
+    finally:
+        cancel_watchdog()
+        if policy is not None and getattr(policy, "_video_writer", None) is not None:
+            with contextlib.suppress(Exception):
+                policy._video_writer.__exit__(None, None, None)
+            policy._video_writer = None
+        if env is not None:
+            with contextlib.suppress(Exception):
+                env.close()
 
 
 if __name__ == "__main__":

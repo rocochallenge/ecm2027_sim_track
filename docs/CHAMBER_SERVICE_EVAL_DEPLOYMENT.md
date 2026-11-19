@@ -184,3 +184,13 @@ IPC metadata 保留 `actions_dim: 19` 表示内部默认维度，另返回 `acce
 
 旧 20 维 HDF5 可以直接使用 `scripts/run_replay_eval.sh ... action`，无需改写原数据文件。
 这只兼容动作接口，不保证不同资产、物理参数、初始状态下的历史回放轨迹完全一致。
+
+### Policy 进程退出与超时
+
+评测入口会在正常完成、policy 异常、键盘中断和 watchdog 超时这几种路径统一关闭 IPC 环境和 video writer，避免 policy 进程或仿真连接残留。ChamberServiceTask 仍以 900 秒仿真时间作为 episode 截止条件；policy 入口另外提供 wall-clock safety watchdog，默认 900 秒，防止 policy 自己不再调用 `env.step()` 时永久挂起。可在 policy YAML 中调整或关闭：
+
+```yaml
+policy_process_timeout_s: 900
+```
+
+设为 `0` 表示关闭 wall-clock watchdog。客户 policy 应在收到 `terminated` 或 `truncated` 后停止当前 episode；入口的 `finally` 清理保证即使 policy 抛异常也会断开 IPC 并退出。
