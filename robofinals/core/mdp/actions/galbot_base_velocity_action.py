@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import MISSING
 import os
 from typing import Sequence
@@ -50,11 +51,47 @@ class GalbotBaseVelocityAction(ActionTerm):
     def processed_actions(self) -> torch.Tensor:
         return self._processed_actions
 
+    @contextmanager
+    def adapt_full_action(self, action):
+        """Accept native 19-D commands or legacy 20-D recorded wheel values.
+
+        Legacy wheel values already include teleop smoothing. Decode them
+        without applying smoothing a second time. Both formats use apply_actions.
+        """
+        action = torch.as_tensor(action, device=self.device, dtype=torch.float32)
+        if action.ndim == 1:
+            action = action.unsqueeze(0)
+        if action.ndim != 2 or action.shape[-1] not in (19, 20):
+            raise ValueError("Galbot-Mobile expects (num_envs, 19) or (num_envs, 20) actions")
+        if action.shape[0] not in (1, self.num_envs):
+            raise ValueError(f"Expected action batch 1 or {self.num_envs}, got {action.shape[0]}")
+        if not torch.isfinite(action).all():
+            raise ValueError("Galbot-Mobile actions must be finite")
+        legacy = action.shape[-1] == 20
+        if legacy:
+            w1, w2, w3, w4 = action[:, 16:20].unbind(dim=-1)
+            velocity = torch.stack((
+                (w1 + w2 + w3 + w4) / 4,
+                (-w1 + w2 + w3 - w4) / 4,
+                (-w1 + w2 - w3 + w4) / 4,
+            ), dim=-1)
+            # Project arbitrary four-wheel inputs onto planar body motion.
+            action = torch.cat((action[:, :16], velocity), dim=-1)
+        previous = getattr(self, "_legacy_wheel_input", False)
+        self._legacy_wheel_input = legacy
+        try:
+            yield action
+        finally:
+            self._legacy_wheel_input = previous
+
     def process_actions(self, actions: torch.Tensor) -> None:
         self._raw_actions[:] = actions[:, :3]
-        self._processed_actions[:] = torch.lerp(
-            self._processed_actions, self._raw_actions, self._smoothing_alpha
-        )
+        if getattr(self, "_legacy_wheel_input", False):
+            self._processed_actions[:] = self._raw_actions
+        else:
+            self._processed_actions[:] = torch.lerp(
+                self._processed_actions, self._raw_actions, self._smoothing_alpha
+            )
 
     def apply_actions(self) -> None:
         vx, vy, wz = self._processed_actions.unbind(dim=-1)

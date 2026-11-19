@@ -154,3 +154,33 @@ git diff --check
 - 客户自己的评测调度器应负责收集仿真侧 score、success、timeout 和 episode 编号。
 
 这样 policy 的职责只有 `observation -> action`，评分和任务判定始终由仿真侧掌握。
+
+### Galbot-Mobile：兼容 19 / 20 维 action
+
+仿真入口按每次 action 的最后一维自动识别格式，policy 不需要切换机器人配置：
+
+| 输入 shape | 最后几维 | 含义 |
+|---|---|---|
+| `(num_envs, 19)` | `action[:, 16:19]` | 机体坐标系 `[vx, vy, wz]`，单位 m/s、m/s、rad/s；保留现有平滑 |
+| `(num_envs, 20)` | `action[:, 16:20]` | 旧遥操录制的 `[w1, w2, w3, w4]`，按下面的映射恢复底盘速度；不重复平滑 |
+
+两种格式前 16 维保持一致。支持 torch tensor、NumPy 数组及浮点列表。
+20 维使用数据集原始 action 值，不是乘过 `wheel_scale=0.01` 的执行器速度，也不是任意真机轮子的 rad/s：
+
+```text
+vx = ( w1 + w2 + w3 + w4) / 4
+vy = (-w1 + w2 + w3 - w4) / 4
+wz = (-w1 + w2 - w3 + w4) / 4
+```
+
+四个值都为 0.4 时恢复 `[0.4, 0, 0]`；横移对应 `[-v, v, v, -v]`；转向对应 `[-w, w, -w, w]`。
+不能对这组值再乘遥操摇杆的横向比例 0.7。
+任意四轮值中不属于平面运动的分量会被上述映射投影掉。
+
+两种输入都进入同一个 `GalbotBaseVelocityAction.apply_actions()`，由它设置轮子目标速度和底盘 root velocity。
+内部 action space 和 observation 中的 `actions` 仍为 19 维。
+IPC metadata 保留 `actions_dim: 19` 表示内部默认维度，另返回 `accepted_action_dims: [19, 20]` 和 `action_formats`。
+输出 20 维的现有模型应使用自己的 20 维输出头，不要根据默认 `actions_dim` 把它裁成 19 维。
+
+旧 20 维 HDF5 可以直接使用 `scripts/run_replay_eval.sh ... action`，无需改写原数据文件。
+这只兼容动作接口，不保证不同资产、物理参数、初始状态下的历史回放轨迹完全一致。

@@ -47,11 +47,21 @@ class EnvService:
         if env is None:
             raise RuntimeError("environment is not attached")
         unwrapped = env.unwrapped if hasattr(env, "unwrapped") else env
-        return {
+        metadata = {
             "actions_dim": int(env.action_space.shape[-1]),
             "decimation": int(unwrapped.cfg.decimation),
             "num_envs": int(getattr(env, "num_envs", 1)),
         }
+        manager = getattr(unwrapped, "action_manager", None)
+        if (metadata["actions_dim"] == 19 and manager is not None
+                and "base_velocity_action" in manager.active_terms
+                and callable(getattr(manager.get_term("base_velocity_action"), "adapt_full_action", None))):
+            metadata["accepted_action_dims"] = [19, 20]
+            metadata["action_formats"] = {
+                "19": "arms_grippers_16+body_velocity_vx_vy_wz",
+                "20": "arms_grippers_16+legacy_wheels_w1_w2_w3_w4",
+            }
+        return metadata
 
     def close(self):
         return self._runtime.close()
