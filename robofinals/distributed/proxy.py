@@ -1,6 +1,6 @@
 """Restricted policy-facing IPC protocol."""
 
-from multiprocessing.managers import BaseManager
+from multiprocessing.managers import BaseManager, BaseProxy
 
 
 def _tensors_to_cpu(obj):
@@ -40,6 +40,14 @@ class EnvService:
         return result, {}
 
     def step(self, action):
+        # Keep the policy-facing contract friendly to NumPy/list policies while
+        # normalizing before the simulator calls ``action.to(device)``.
+        try:
+            import torch
+            if not hasattr(action, "to"):
+                action = torch.as_tensor(action, dtype=torch.float32)
+        except ImportError:
+            pass
         return _tensors_to_cpu(self._runtime.step(_tensors_to_cpu(action)))
 
     def get_metadata(self):
@@ -91,12 +99,16 @@ class RemoteEnv:
     def __init__(self, service):
         self._svc = service
         self.actions_dim = None
+        self.accepted_action_dims = None
+        self.action_formats = None
         self.decimation = None
         self.num_envs = 1
 
     def attach(self, env_cfg):
         metadata = self._svc.attach(env_cfg)
         self.actions_dim = metadata["actions_dim"]
+        self.accepted_action_dims = metadata.get("accepted_action_dims", [self.actions_dim])
+        self.action_formats = metadata.get("action_formats", {})
         self.decimation = metadata["decimation"]
         self.num_envs = metadata["num_envs"]
         return metadata
@@ -116,4 +128,19 @@ class RemoteEnv:
         return observation, terminated, truncated
 
     def close(self):
-        return self._svc.close()
+        service = self._svc
+        if service is None:
+            return
+        try:
+            return service.close()
+        finally:
+            if isinstance(service, BaseProxy):
+                # close() shuts down this server. Do not reconnect for decref
+                # during proxy garbage collection: the shutdown may still be
+                # completing and that authentication exchange can block.
+                service._close.cancel()
+                connection = getattr(service._tls, "connection", None)
+                if connection is not None:
+                    connection.close()
+                    del service._tls.connection
+            self._svc = None

@@ -21,7 +21,6 @@ import contextlib
 import importlib
 import json
 import os
-import signal
 import sys
 import numpy as np
 import tqdm
@@ -86,32 +85,6 @@ def _load_policy_class(policy_name):
         raise AttributeError(
             f"Policy class {class_name!r} was not found in module {module_name!r}"
         ) from exc
-
-
-class PolicyProcessTimeout(TimeoutError):
-    """Raised when a policy process exceeds its wall-clock safety limit."""
-
-
-def _install_policy_watchdog(timeout_s):
-    """Install a main-thread watchdog and return a cancellation callback."""
-    timeout_s = float(timeout_s or 0.0)
-    if timeout_s <= 0 or not hasattr(signal, "setitimer"):
-        return lambda: None
-
-    def _raise_timeout(_signum, _frame):
-        raise PolicyProcessTimeout(
-            f"policy evaluation exceeded wall-clock limit of {timeout_s:g} seconds"
-        )
-
-    previous_handler = signal.getsignal(signal.SIGALRM)
-    signal.signal(signal.SIGALRM, _raise_timeout)
-    signal.setitimer(signal.ITIMER_REAL, timeout_s)
-
-    def _cancel():
-        signal.setitimer(signal.ITIMER_REAL, 0.0)
-        signal.signal(signal.SIGALRM, previous_handler)
-
-    return _cancel
 
 
 # add argparse arguments
@@ -180,7 +153,6 @@ def parse_args_and_config():
 def main(usr_args):
     env = None
     policy = None
-    cancel_watchdog = _install_policy_watchdog(usr_args.get("policy_process_timeout_s", 900))
     try:
         from robofinals.distributed.proxy import RemoteEnv
         from robofinals.distributed.restful import DotDict
@@ -205,6 +177,10 @@ def main(usr_args):
         policy = policy_class(usr_args)
         eval_meta = env.attach(env_cfg)
         usr_args["actions_dim"] = eval_meta["actions_dim"]
+        usr_args["accepted_action_dims"] = eval_meta.get(
+            "accepted_action_dims", [eval_meta["actions_dim"]]
+        )
+        usr_args["action_formats"] = eval_meta.get("action_formats", {})
         usr_args["decimation"] = eval_meta["decimation"]
         if usr_args.get("eval_initial_states_path"):
             raise ValueError(
@@ -242,7 +218,6 @@ def main(usr_args):
         with open(result_path, "w", encoding="utf-8") as f:
             json.dump(final_results, f, indent=4, ensure_ascii=False)
     finally:
-        cancel_watchdog()
         if policy is not None and getattr(policy, "_video_writer", None) is not None:
             with contextlib.suppress(Exception):
                 policy._video_writer.__exit__(None, None, None)

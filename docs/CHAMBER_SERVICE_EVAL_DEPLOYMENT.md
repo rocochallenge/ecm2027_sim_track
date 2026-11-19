@@ -62,7 +62,23 @@ python robofinals/scripts/eval/policy.py \
 
 policy 进程连接 `127.0.0.1:50000`。如果 policy 在另一个容器中，两个容器必须共享网络，或者把 policy 代码中的 IPC 地址改成仿真容器的可达地址；认证 key 必须一致。
 
-policy 进程完成所有 episode 后，停止仿真容器（Ctrl-C 或容器停止）以触发最终 metrics JSON 写盘。
+policy 入口完成所有 episode 或遇到异常时，会在 `finally` 中关闭视频 writer 并调用 `env.close()`。IPC 仿真服务收到关闭请求后退出服务循环，执行仿真侧清理和最终 metrics JSON 写盘；policy 正常返回时退出码为 0，未捕获异常时为非零。
+
+### 单轮结束和进程退出
+
+`test_num` 是总评测轮数（默认 10）。任务完成返回 `terminated=True`，900 秒仿真时间到期返回 `truncated=True`；两者都表示当前轮结束，不表示整个进程立即结束。客户直接使用 IPC 时，单环境循环应这样处理：
+
+```python
+while True:
+    action = policy(observation)
+    observation, terminated, truncated = env.step(action)
+    if bool(terminated.any()) or bool(truncated.any()):
+        break
+```
+
+使用 `BasePolicy.step_environment()` 时，返回值为 `(observation, done, extras)`，其中 `done = terminated OR truncated`，保留每个环境的布尔标记。客户 `policy.eval()` 应在本轮结束后返回；多环境需跟踪每个环境的结束状态。`done` 不能作为任务成功或评分依据，最终结果以仿真侧 metrics 为准。
+
+没有 wall-clock watchdog。仿真时间只随仿真 step 推进：如果客户模型卡在推理中、不再调用 step，或者客户代码忽略结束标记一直循环，仿真超时不会强制中断客户 Python 代码。此类故障需要客户调度器取消进程或容器；`finally` 仅在控制流返回或异常展开时执行，也不保证清理客户自行创建的线程或子进程。
 
 当前 policy 入口不再使用 `scene.get_state`、`reset_to` 或通用远程属性代理。`eval_initial_states_path` 也不属于受限协议；如果客户需要固定初始状态，应由仿真侧实现 episode/reset 配置。
 
@@ -184,13 +200,3 @@ IPC metadata 保留 `actions_dim: 19` 表示内部默认维度，另返回 `acce
 
 旧 20 维 HDF5 可以直接使用 `scripts/run_replay_eval.sh ... action`，无需改写原数据文件。
 这只兼容动作接口，不保证不同资产、物理参数、初始状态下的历史回放轨迹完全一致。
-
-### Policy 进程退出与超时
-
-评测入口会在正常完成、policy 异常、键盘中断和 watchdog 超时这几种路径统一关闭 IPC 环境和 video writer，避免 policy 进程或仿真连接残留。ChamberServiceTask 仍以 900 秒仿真时间作为 episode 截止条件；policy 入口另外提供 wall-clock safety watchdog，默认 900 秒，防止 policy 自己不再调用 `env.step()` 时永久挂起。可在 policy YAML 中调整或关闭：
-
-```yaml
-policy_process_timeout_s: 900
-```
-
-设为 `0` 表示关闭 wall-clock watchdog。客户 policy 应在收到 `terminated` 或 `truncated` 后停止当前 episode；入口的 `finally` 清理保证即使 policy 抛异常也会断开 IPC 并退出。

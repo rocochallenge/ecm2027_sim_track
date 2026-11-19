@@ -83,10 +83,13 @@ class BasePolicy(ABC):
 
     def step_environment(self, task_env: Any, action: Union[np.ndarray, torch.Tensor],
                          usr_args: Dict[str, Any]) -> Tuple[Dict[str, Any], bool, Dict[str, Any]]:
-        """Execute environment step"""
+        """Return observation, per-env episode-done mask, and extras.
+
+        Done includes both termination and truncation; it is not a success mask.
+        """
 
         if isinstance(action, np.ndarray):
-            action = torch.from_numpy(action).float().cuda()
+            action = torch.from_numpy(action).float()
 
         if 'joint_mapping' in usr_args:
             # action = action.squeeze(0)
@@ -94,14 +97,20 @@ class BasePolicy(ABC):
 
         transition = task_env.step(action)
         if isinstance(transition, (tuple, list)) and len(transition) == 3:
-            obs, terminated, _truncated = transition
+            obs, terminated, truncated = transition
             extras = {}
         else:
-            obs, _, terminated, _, extras = transition
-        # Return the raw per-env termination signal. Callers that only need a
-        # scalar can reduce it (e.g. GR00T uses _to_terminated_flag); batched
-        # callers (multi-env eval) need the per-env values.
-        return obs, terminated, extras
+            obs, _, terminated, truncated, extras = transition
+        # Preserve batch masks and tensor device for existing policy loops.
+        if torch.is_tensor(terminated) or torch.is_tensor(truncated):
+            device = terminated.device if torch.is_tensor(terminated) else truncated.device
+            done = torch.logical_or(
+                torch.as_tensor(terminated, device=device),
+                torch.as_tensor(truncated, device=device),
+            )
+        else:
+            done = np.logical_or(terminated, truncated)
+        return obs, done, extras
 
     def encode_obs(self, observation: Dict[str, Any], transpose: bool = True, keep_dim_env: bool = False,
                    env_idx: int = 0) -> Dict[str, Any]:
