@@ -34,6 +34,8 @@ class EnvService:
         return self.get_metadata()
 
     def reset(self, seed=None):
+        if getattr(self._runtime, "_eval_config_locked", False):
+            seed = None
         result = _tensors_to_cpu(self._runtime.reset(seed=seed))
         if isinstance(result, (tuple, list)) and len(result) >= 2:
             return result[0], {}

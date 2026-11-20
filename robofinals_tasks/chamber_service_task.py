@@ -275,13 +275,19 @@ class ChamberServiceTask(HomeBaseTask):
     def _setup_scene(self, env, env_ids=None):
         # Runs on every environment reset. Keep the finished episode's result
         # before its scoring state is cleared.
-        self._snapshot_finished_episode("reset")
+        reason = getattr(env, "_forced_episode_end_reason", None) or "reset"
+        self._snapshot_finished_episode(reason, env_ids, env=env)
         super()._setup_scene(env, env_ids)
         if self._task_assets is not None:
             self._task_assets.resample_sponge_init_state(self.rng)
             self._apply_sponge_init_to_sim(env, env_ids)
         self._ensure_state_buffers(env)
-        self._clear_scoring_state()
+        mask = torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)
+        if env_ids is None:
+            mask[:] = True
+        else:
+            mask[torch.as_tensor(env_ids, device=env.device, dtype=torch.long)] = True
+        self._clear_scoring_state(mask)
 
     def _ensure_state_buffers(self, env):
         if (
@@ -334,8 +340,8 @@ class ChamberServiceTask(HomeBaseTask):
             return
         # Normally the reset event has already archived and cleared the state;
         # this also covers resets that bypass the reset event.
-        if bool((self._score_steps[reset_ids] > 1).any()):
-            self._snapshot_finished_episode("reset")
+        if bool((self._score_steps[reset_ids] > 0).any()):
+            self._snapshot_finished_episode("reset", reset_ids)
         self._clear_scoring_state(reset_ids)
 
     # ------------------------------------------------------------------
@@ -550,15 +556,60 @@ class ChamberServiceTask(HomeBaseTask):
             "episode_sim_time_s": round(steps * float(self._step_dt), 3),
         }
 
-    def _snapshot_finished_episode(self, reason: str) -> None:
-        """Archive the current episode's result before the scoring state is cleared."""
+    def _snapshot_finished_episode(self, reason: str, env_ids=None, env=None) -> None:
+        """Archive only the slots being reset, before their scores are cleared."""
         if self._point_flags is None or self._score_steps is None:
             return
-        if int(self._score_steps.max().item()) < 2:
-            return
-        metrics = self._episode_metrics()
-        metrics["end_reason"] = reason
-        self._finished_episodes.append(metrics)
+        if env_ids is None:
+            ids = range(self._point_flags.shape[0])
+        else:
+            ids_tensor = torch.as_tensor(env_ids, device=self._point_flags.device)
+            if ids_tensor.dtype == torch.bool:
+                ids_tensor = ids_tensor.nonzero(as_tuple=False).flatten()
+            ids = ids_tensor.flatten().detach().cpu().tolist()
+        for env_id in ids:
+            env_id = int(env_id)
+            steps = int(self._score_steps[env_id].item())
+            if steps < 1 and reason != "wall_clock_timeout":
+                continue
+            points = [bool(v) for v in self._point_flags[env_id].detach().cpu().tolist()]
+            stages = [bool(v) for v in self._stage_flags[env_id].detach().cpu().tolist()]
+            wipe_start, wipe_end = self._WIPE_SLICE
+            terminated = truncated = False
+            if env is not None and getattr(env, "reset_buf", None) is not None and bool(env.reset_buf[env_id]):
+                terminated = bool(env.termination_manager.terminated[env_id])
+                truncated = bool(env.termination_manager.time_outs[env_id])
+            if reason == "wall_clock_timeout":
+                terminated, truncated = False, True
+                end_reason = "wall_clock_timeout"
+            elif terminated and truncated:
+                end_reason = "terminated_and_truncated"
+            elif terminated:
+                end_reason = "terminated"
+            elif truncated:
+                end_reason = "truncated"
+            else:
+                end_reason = reason
+            metrics = {
+                "env_id": env_id,
+                "terminated": terminated,
+                "truncated": truncated,
+                "process_score": int(self._process_score[env_id].item()),
+                "max_score": self.MAX_SCORE,
+                "points": dict(zip(self.POINT_NAMES, points)),
+                "stage_scores": {name: int(sum(points[start:end]))
+                                 for name, (start, end) in zip(self._stage_names, self.STAGE_POINT_SLICES)},
+                "wipe_faces_completed": int(sum(points[wipe_start:wipe_end])),
+                "completed_stages": [name for name, done in zip(self._stage_names, stages) if done],
+                "success": all(stages),
+                "episode_steps": steps,
+                "episode_sim_time_s": round(steps * float(self._step_dt), 3),
+                "end_reason": end_reason,
+            }
+            callback = getattr(self, "_episode_finished_callback", None)
+            if callback is not None:
+                callback(env_id, metrics)
+            self._finished_episodes.append(metrics)
         if len(self._finished_episodes) > self.MAX_FINISHED_EPISODES:
             del self._finished_episodes[: -self.MAX_FINISHED_EPISODES]
 

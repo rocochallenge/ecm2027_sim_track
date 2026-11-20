@@ -33,7 +33,14 @@ AppLauncher._SIM_APP_CFG_TYPES.setdefault("limit_cpu_threads", [int])
 
 # add argparse arguments
 parser = argparse.ArgumentParser(description="Keyboard teleoperation for Isaac Lab environments.")
-parser.add_argument("--remote_protocol", type=str, default="ipc", help="Remote protocol, can be ipc or restful")
+parser.add_argument("--remote_protocol", type=str, default="grpc", help="Remote protocol; competition interface uses grpc")
+parser.add_argument(
+    "--eval_env_config", default=None,
+    help="Evaluator-owned JSON environment configuration; client attach config and reset seed are ignored.",
+)
+parser.add_argument("--eval_wall_timeout_minutes", type=float, default=300.0,
+                    help="Wall-clock limit per environment episode in minutes (gRPC).")
+parser.add_argument("--eval_record_dir", default="./eval_result/episodes", help="Evaluator-only episode artifact root (gRPC).")
 parser.add_argument("--ipc_host", type=str, default="127.0.0.1", help="IPC host")
 parser.add_argument("--ipc_port", type=int, default=50000, help="IPC port")
 parser.add_argument("--ipc_authkey", type=str, default="lightwheel", help="IPC authkey")
@@ -80,6 +87,12 @@ if getattr(args_cli, "anim_recording_enabled", False):
 if args_cli.remote_protocol == "restful":
     from robofinals.distributed.restful import RestfulEnvWrapper
     RemoteEnvWrapper = partial(RestfulEnvWrapper, address=(args_cli.restful_host, args_cli.restful_port))
+elif args_cli.remote_protocol == "grpc":
+    from robofinals.distributed.grpc_policy import GrpcPolicyServer
+    RemoteEnvWrapper = partial(GrpcPolicyServer, address=(args_cli.ipc_host, args_cli.ipc_port),
+                               record_dir=args_cli.eval_record_dir,
+                               wall_timeout_seconds=args_cli.eval_wall_timeout_minutes * 60,
+                               record_metadata={"config_file": args_cli.eval_env_config})
 elif args_cli.remote_protocol == "ipc":   # ipc
     from robofinals.distributed.ipc import IpcDistributedEnvWrapper
     RemoteEnvWrapper = partial(IpcDistributedEnvWrapper, address=(args_cli.ipc_host, args_cli.ipc_port), authkey=args_cli.ipc_authkey.encode())
@@ -222,6 +235,9 @@ def make_env_cfg(cfg):
     # randomly sample a seed if seed = -1
     if cfg.seed == -1:
         cfg.seed = random.randint(0, 10000)
+    if args_cli.eval_env_config:
+        # Isaac seeds its generators from the final environment config at construction.
+        env_cfg.seed = cfg.seed
     return task_name, env_cfg
 
 
@@ -280,7 +296,29 @@ def main():
     """Running keyboard teleoperation with Isaac Lab manipulation environment."""
 
     """Rest everything follows."""
-    env_server = RemoteEnvWrapper(env_initializer=partial(make_env, launcher_args=app_launcher_args))
+    if args_cli.eval_env_config:
+        if args_cli.remote_protocol not in ("ipc", "grpc"):
+            raise ValueError("--eval_env_config currently supports only IPC or gRPC")
+        from robofinals.distributed.eval_config import load_eval_config, locked_initializer
+        locked_cfg = load_eval_config(args_cli.eval_env_config)
+        if args_cli.remote_protocol == "grpc":
+            from robofinals.distributed.grpc_policy import _MAX_ENVS
+            if locked_cfg.num_envs > _MAX_ENVS:
+                raise ValueError(f"gRPC contract supports at most {_MAX_ENVS} environment slots")
+            # The policy contract fixes native base-action smoothing at 0.1.
+            os.environ["ROBOFINALS_GALBOT_WHEEL_SMOOTHING_ALPHA"] = "0.1"
+        initializer = locked_initializer(make_env, locked_cfg, app_launcher_args)
+    else:
+        if args_cli.remote_protocol == "grpc":
+            raise ValueError("gRPC requires evaluator-owned --eval_env_config")
+        initializer = partial(make_env, launcher_args=app_launcher_args)
+    if args_cli.remote_protocol == "grpc":
+        env_server = RemoteEnvWrapper(env_initializer=initializer, record_metadata={
+            "config_file": args_cli.eval_env_config, "environment_config": vars(locked_cfg)})
+    else:
+        env_server = RemoteEnvWrapper(env_initializer=initializer)
+    # reset(seed=...) is also policy-controlled; do not let it override evaluator seeds.
+    env_server._eval_config_locked = bool(args_cli.eval_env_config)
     try:
         env_server.serve()
     finally:

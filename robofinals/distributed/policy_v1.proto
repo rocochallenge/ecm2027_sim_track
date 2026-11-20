@@ -1,0 +1,36 @@
+syntax = "proto3";
+package ecm27.policy.v1;
+
+message Empty {}
+
+// Each byte field has the fixed type, shape and order published in README.
+// Floats are little-endian float32, images are HWC uint8 RGB.
+message Observation {
+  bytes first_person_camera_rgb = 1;
+  bytes left_hand_camera_rgb = 2;
+  bytes right_hand_camera_rgb = 3;
+  bytes actions = 4;
+  bytes joint_pos = 5;
+  bytes joint_vel = 6;
+  bytes eef_pos = 7;
+  bytes eef_quat = 8;
+  bytes gripper_pos = 9;
+}
+message Action {
+  // One environment's 19-dimensional or legacy 20-dimensional action.
+  repeated float values = 1;
+}
+message ActionBatch {
+  repeated Action actions = 1;
+}
+message Transition {
+  repeated Observation observations = 1;
+  repeated bool terminated = 2;
+  repeated bool truncated = 3;
+  // Present after an end; only entries with terminated/truncated are terminal.
+  repeated Observation final_observations = 4;
+}
+service Policy {
+  rpc GetObservation(Empty) returns (Transition);
+  rpc Step(ActionBatch) returns (Transition);
+}

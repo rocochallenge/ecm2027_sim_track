@@ -51,7 +51,11 @@ fi
   -e "$ISAACLAB_ROOT/source/isaaclab_visualizers" \
   -e "$ISAACLAB_ROOT/source/isaaclab_assets" \
   -e "$ISAACLAB_ROOT/source/isaaclab_tasks" \
+  -e "$ISAACLAB_ROOT/source/isaaclab_contrib" \
   -e "$PROJECT_ROOT"
+# Avoid Isaac Lab Teleop's broad UI extras: imgui 2.0.0 cannot build on Python 3.12.
+"$PYTHON_BIN" -m pip install --no-build-isolation -c "$CONSTRAINTS" 'isaacteleop~=1.3.0' 'dex-retargeting==0.5.0'
+"$PYTHON_BIN" -m pip install --no-deps --no-build-isolation -c "$CONSTRAINTS" -e "$ISAACLAB_ROOT/source/isaaclab_teleop"
 "$PYTHON_BIN" -m pip check
 "$PYTHON_BIN" "$PROJECT_ROOT/scripts/check_environment.py"
 printf '\nInstallation checks passed. Run the documented Chamber teleop/replay/evaluation runtime checks next.\n'

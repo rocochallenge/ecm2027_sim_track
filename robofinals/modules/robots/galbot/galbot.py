@@ -17,7 +17,7 @@ from isaaclab_arena.utils.pose import Pose
 
 import robofinals.core.mdp as mdp
 import robofinals.core.mdp as mdp_isaac_lab
-from robofinals.core.mdp import ee_frame_pos, ee_frame_quat, gripper_pos
+from robofinals.core.mdp import ee_frame_pos, ee_frame_quat
 from robofinals.modules.robots.robot_arena_base import EmbodimentBasePolicyObservationCfg, LwEmbodimentBase
 from robofinals.utils.env import ExecuteMode
 from robofinals.utils.isaac_data_compat import as_torch, sim_quat_raw_to_xyzw_torch
@@ -133,6 +133,14 @@ class GalbotCameraCfg:
     right_hand_camera: TiledCameraCfg = None
 
 
+def galbot_gripper_positions(env):
+    """Absolute driven joint positions, ordered left then right, in radians."""
+    robot = env.scene["robot"]
+    names = robot.data.joint_names
+    indices = [names.index("left_gripper_joint"), names.index("right_gripper_joint")]
+    return as_torch(robot.data.joint_pos)[:, indices]
+
+
 @configclass
 class GalbotPolicyObservationsCfg(EmbodimentBasePolicyObservationCfg):
     actions = ObsTerm(func=mdp_isaac_lab.last_action)
@@ -140,7 +148,7 @@ class GalbotPolicyObservationsCfg(EmbodimentBasePolicyObservationCfg):
     joint_vel = ObsTerm(func=mdp_isaac_lab.joint_vel_rel)
     eef_pos = ObsTerm(func=ee_frame_pos)
     eef_quat = ObsTerm(func=ee_frame_quat)
-    gripper_pos = ObsTerm(func=gripper_pos)
+    gripper_pos = ObsTerm(func=galbot_gripper_positions)
 
     def __post_init__(self):
         self.enable_corruption = False

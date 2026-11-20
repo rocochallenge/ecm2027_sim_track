@@ -1,0 +1,5 @@
+# Policy gRPC transport and evaluator-side video recording.
+grpcio>=1.60
+protobuf>=5
+numpy>=1.24
+opencv-python>=4.8
