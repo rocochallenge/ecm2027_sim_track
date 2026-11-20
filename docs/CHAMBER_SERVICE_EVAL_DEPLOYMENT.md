@@ -118,11 +118,15 @@ IPC 使用 Python `multiprocessing.managers.BaseManager`，但 policy 端只拿�
 - `get_process_score_metrics()`：输出当前分数、每个环境分数、擦拭面数和最高分。
 - `get_checker_results()`：把结果放进 `chamber_process`。
 
-当前满分：
+当前满分（与 `ChamberServiceTask.MAX_SCORE` 和 `POINT_NAMES` 对齐）：
 
 ```text
-5 个普通 stage × 5 分 + 5 个擦拭面 × 1 分 = 30 分
+阶段 1 打开腔体 2 分 + 阶段 2 取出原工件 1 分 + 阶段 3 将原工件放入盒中 1 分
++ 阶段 4 拿起海绵并擦拭 5 个腔体面（1 + 5）6 分
++ 阶段 5 取出并放置替换工件 2 分 + 阶段 6 关闭腔体 1 分 = 13 分
 ```
+
+每个计分点每轮最多计一次；后续阶段只会在前一阶段的所有计分点完成后启用。5 个擦拭面分别是 x-/x+/y-/y+ 内壁和底面。
 
 Chamber Service 的仿真超时为 900 秒，使用仿真时间，不依赖 wall clock。客户部署时应以这个仿真侧 JSON 为准，不以 policy 进程打印的 success 结果为准。建议把 `/workspace/eval_result` 挂载到宿主机。
 
