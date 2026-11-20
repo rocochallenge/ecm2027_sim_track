@@ -17,6 +17,7 @@
 """Launch Isaac Sim Simulator first."""
 
 import argparse
+import json
 import random
 from functools import partial
 
@@ -32,7 +33,14 @@ AppLauncher._SIM_APP_CFG_TYPES.setdefault("limit_cpu_threads", [int])
 
 # add argparse arguments
 parser = argparse.ArgumentParser(description="Keyboard teleoperation for Isaac Lab environments.")
-parser.add_argument("--remote_protocol", type=str, default="ipc", help="Remote protocol, can be ipc or restful")
+parser.add_argument("--remote_protocol", type=str, default="grpc", help="Remote protocol; competition interface uses grpc")
+parser.add_argument(
+    "--eval_env_config", default=None,
+    help="Evaluator-owned JSON environment configuration; client attach config and reset seed are ignored.",
+)
+parser.add_argument("--eval_wall_timeout_minutes", type=float, default=300.0,
+                    help="Wall-clock limit per environment episode in minutes (gRPC).")
+parser.add_argument("--eval_record_dir", default="./eval_result/episodes", help="Evaluator-only episode artifact root (gRPC).")
 parser.add_argument("--ipc_host", type=str, default="127.0.0.1", help="IPC host")
 parser.add_argument("--ipc_port", type=int, default=50000, help="IPC port")
 parser.add_argument("--ipc_authkey", type=str, default="lightwheel", help="IPC authkey")
@@ -47,6 +55,12 @@ parser.add_argument("--rtsp_mount_prefix", type=str, default="/env", help="RTSP 
 parser.add_argument("--rtsp_advertise_host", type=str, default=None, help="Hostname/IP advertised in stream URLs")
 parser.add_argument("--rtsp_max_streams", type=int, default=None, help="Cap number of streams (default: all envs)")
 parser.add_argument("--rtsp_bitrate", type=str, default="4M", help="FFmpeg video bitrate, e.g. 4M, 8M, 10M")
+parser.add_argument(
+    "--eval_metrics_path",
+    type=str,
+    default="./eval_result/chamber_service_metrics.json",
+    help="Simulator-side JSON path for final task success and score metrics.",
+)
 parser.add_argument(
     "--anim_recording_output_dir",
     type=str,
@@ -73,6 +87,12 @@ if getattr(args_cli, "anim_recording_enabled", False):
 if args_cli.remote_protocol == "restful":
     from robofinals.distributed.restful import RestfulEnvWrapper
     RemoteEnvWrapper = partial(RestfulEnvWrapper, address=(args_cli.restful_host, args_cli.restful_port))
+elif args_cli.remote_protocol == "grpc":
+    from robofinals.distributed.grpc_policy import GrpcPolicyServer
+    RemoteEnvWrapper = partial(GrpcPolicyServer, address=(args_cli.ipc_host, args_cli.ipc_port),
+                               record_dir=args_cli.eval_record_dir,
+                               wall_timeout_seconds=args_cli.eval_wall_timeout_minutes * 60,
+                               record_metadata={"config_file": args_cli.eval_env_config})
 elif args_cli.remote_protocol == "ipc":   # ipc
     from robofinals.distributed.ipc import IpcDistributedEnvWrapper
     RemoteEnvWrapper = partial(IpcDistributedEnvWrapper, address=(args_cli.ipc_host, args_cli.ipc_port), authkey=args_cli.ipc_authkey.encode())
@@ -118,6 +138,17 @@ def _shutdown_env_server(env_server):
     """Bake OVD animation (if enabled) before tearing down the sim."""
     global _attached_env
     env = getattr(env_server, "_env", None) or _attached_env
+    metrics_path = getattr(args_cli, "eval_metrics_path", None)
+    if env is not None and metrics_path:
+        try:
+            task = env.cfg.isaaclab_arena_env.task
+            metrics = task.get_checker_results()
+            os.makedirs(os.path.dirname(metrics_path) or ".", exist_ok=True)
+            with open(metrics_path, "w", encoding="utf-8") as handle:
+                json.dump(metrics, handle, indent=2, ensure_ascii=False, default=str)
+            print(f"[env_server] Saved simulator-side evaluation metrics to {metrics_path}", flush=True)
+        except Exception as exc:
+            print(f"[env_server] WARNING: could not save evaluation metrics: {exc}", flush=True)
     if getattr(args_cli, "anim_recording_enabled", False):
         runtime = getattr(env, "backend_runtime", None)
         if runtime is not None:
@@ -191,8 +222,9 @@ def make_env_cfg(cfg):
         )
 
     env_cfg.observations.policy.concatenate_terms = cfg.concatenate_terms
-    # modify configuration
-    env_cfg.terminations.time_out = None
+    # Keep task-defined simulation timeouts. ChamberServiceTask sets its
+    # benchmark limit to 900 simulation seconds; the policy loop may stop
+    # earlier, but the environment remains the authority for hard timeout.
     # override configurations with non-hydra CLI arguments
     env_cfg.scene.num_envs = cfg.num_envs if cfg.num_envs is not None else env_cfg.scene.num_envs
     env_cfg.sim.device = cfg.device if cfg.device is not None else env_cfg.sim.device
@@ -203,6 +235,9 @@ def make_env_cfg(cfg):
     # randomly sample a seed if seed = -1
     if cfg.seed == -1:
         cfg.seed = random.randint(0, 10000)
+    if args_cli.eval_env_config:
+        # Isaac seeds its generators from the final environment config at construction.
+        env_cfg.seed = cfg.seed
     return task_name, env_cfg
 
 
@@ -261,7 +296,29 @@ def main():
     """Running keyboard teleoperation with Isaac Lab manipulation environment."""
 
     """Rest everything follows."""
-    env_server = RemoteEnvWrapper(env_initializer=partial(make_env, launcher_args=app_launcher_args))
+    if args_cli.eval_env_config:
+        if args_cli.remote_protocol not in ("ipc", "grpc"):
+            raise ValueError("--eval_env_config currently supports only IPC or gRPC")
+        from robofinals.distributed.eval_config import load_eval_config, locked_initializer
+        locked_cfg = load_eval_config(args_cli.eval_env_config)
+        if args_cli.remote_protocol == "grpc":
+            from robofinals.distributed.grpc_policy import _MAX_ENVS
+            if locked_cfg.num_envs > _MAX_ENVS:
+                raise ValueError(f"gRPC contract supports at most {_MAX_ENVS} environment slots")
+            # The policy contract fixes native base-action smoothing at 0.1.
+            os.environ["ROBOFINALS_GALBOT_WHEEL_SMOOTHING_ALPHA"] = "0.1"
+        initializer = locked_initializer(make_env, locked_cfg, app_launcher_args)
+    else:
+        if args_cli.remote_protocol == "grpc":
+            raise ValueError("gRPC requires evaluator-owned --eval_env_config")
+        initializer = partial(make_env, launcher_args=app_launcher_args)
+    if args_cli.remote_protocol == "grpc":
+        env_server = RemoteEnvWrapper(env_initializer=initializer, record_metadata={
+            "config_file": args_cli.eval_env_config, "environment_config": vars(locked_cfg)})
+    else:
+        env_server = RemoteEnvWrapper(env_initializer=initializer)
+    # reset(seed=...) is also policy-controlled; do not let it override evaluator seeds.
+    env_server._eval_config_locked = bool(args_cli.eval_env_config)
     try:
         env_server.serve()
     finally:

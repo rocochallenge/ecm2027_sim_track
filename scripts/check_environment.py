@@ -30,7 +30,7 @@ def main() -> int:
             report(package_name, actual.split("+")[0] == expected, f"{actual}; expected {expected}")
         except importlib.metadata.PackageNotFoundError:
             report(package_name, False, "not installed")
-    for module_name in ("isaaclab", "isaaclab_physx", "isaaclab_ov", "isaaclab_visualizers", "isaaclab_assets", "isaaclab_tasks", "robofinals", "robofinals_tasks", "isaaclab_arena"):
+    for module_name in ("isaaclab", "isaaclab_physx", "isaaclab_ov", "isaaclab_visualizers", "isaaclab_assets", "isaaclab_tasks", "isaaclab_contrib", "isaaclab_teleop", "robofinals", "robofinals_tasks", "isaaclab_arena"):
         spec = importlib.util.find_spec(module_name)
         report(module_name, spec is not None, str(spec.origin if spec else "not found"))
     try:

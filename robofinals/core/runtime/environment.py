@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import ExitStack
 from typing import Any, Iterable
 
 from .lifecycle import HostLifecycle, LifecycleError, LifecycleMachine
@@ -39,10 +40,17 @@ class EnvironmentLifecycle:
     def step(self, action: Any) -> StepResult:
         if self.host_state is not HostLifecycle.RUNNING:
             raise LifecycleError(f"step requires running host, got {self.host_state}")
-        result = StepResult.from_env_result(
-            self.env.step(action),
-            env_ids=tuple(range(self.machine.episodes.num_envs)),
-        )
+        with ExitStack() as stack:
+            manager = getattr(self.env, "action_manager", None)
+            if manager is not None and "base_velocity_action" in manager.active_terms:
+                term = manager.get_term("base_velocity_action")
+                adapter = getattr(term, "adapt_full_action", None)
+                if callable(adapter) and manager.total_action_dim == 19:
+                    action = stack.enter_context(adapter(action))
+            result = StepResult.from_env_result(
+                self.env.step(action),
+                env_ids=tuple(range(self.machine.episodes.num_envs)),
+            )
         self._update_episode_states(result)
         return result
 

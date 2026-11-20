@@ -613,8 +613,11 @@ def patch_step():
         self.common_step_counter += 1  # total step (common for all envs)
         # -- check terminations
         self.reset_buf = self.termination_manager.compute()
-        self.reset_time_outs = self.termination_manager.time_outs
-        self.extras["is_success"] = self.termination_manager._terminated_buf
+        # Keep Gym's termination and time-limit signals distinct, and preserve
+        # them across per-slot reset before returning the transition.
+        self.reset_terminated = self.termination_manager.terminated.clone()
+        self.reset_time_outs = self.termination_manager.time_outs.clone()
+        self.extras["is_success"] = self.reset_terminated
         # -- reward computation
         self.reward_buf = self.reward_manager.compute(dt=self.step_dt)
         reward_done = time.perf_counter() if perf_enabled else 0.0
@@ -701,7 +704,7 @@ def patch_step():
             )
 
         # return observations, rewards, resets and extras
-        return self.obs_buf, self.reward_buf, self.reset_buf, self.reset_time_outs, self.extras
+        return self.obs_buf, self.reward_buf, self.reset_terminated, self.reset_time_outs, self.extras
 
     ManagerBasedRLEnv.step = step
 

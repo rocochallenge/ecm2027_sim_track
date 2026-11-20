@@ -101,7 +101,7 @@ class RestfulEnvWrapper(BaseDistributedEnv):
     - Image extraction tries:
         1) Find (H,W,3) uint8 arrays in obs (up to 3).
         2) Fallback to env.render() if available.
-    - Action is expected as a space-separated string: 'dx dy dz rdx rdy rdz o'
+    - Action accepts a legacy space-separated string or a JSON float array.
     - Server can be stopped with Ctrl+C or by calling the /shutdown endpoint
     """
 
@@ -179,6 +179,19 @@ class RestfulEnvWrapper(BaseDistributedEnv):
                 lang = ""
             return {"lang": lang}
 
+        @app.route("/metrics", methods=["GET"])
+        @flask_handle_error(self)
+        def metrics():
+            """Return task success/score state without exposing policy internals."""
+            if self._env is None:
+                raise APIError("environment is not attached", 500)
+            try:
+                task = self._env.cfg.isaaclab_arena_env.task
+                payload = task.get_checker_results()
+            except Exception as exc:
+                raise APIError(f"task metrics unavailable: {exc}", 500)
+            return self._tensor_to_jsonable(payload)
+
         @app.route("/reset", methods=["POST"])
         @flask_handle_error(self)
         def reset():
@@ -202,7 +215,10 @@ class RestfulEnvWrapper(BaseDistributedEnv):
                 lang = ""
             return {
                 "obs": images_b64,
-                # "obs_tensor": self._tensor_to_jsonable(obs),
+                # Keep the raw structured observation available to an external
+                # policy container. ``obs`` remains the backwards-compatible
+                # image list used by existing clients.
+                "observation": self._tensor_to_jsonable(obs),
                 "info": {"task_str": 'Task:' + lang}
             }
 
@@ -211,7 +227,7 @@ class RestfulEnvWrapper(BaseDistributedEnv):
         def step():
             data = request.get_json(force=True, silent=True) or {}
             sid = data.get("session_id")
-            action_str = data.get("action")
+            action_payload = data.get("action")
             step_count = data.get("step_count", 1)
             if step_count < 1:
                 raise APIError(f"step_count must be >= 1, got {step_count}", 400)
@@ -219,11 +235,8 @@ class RestfulEnvWrapper(BaseDistributedEnv):
 
             if not self._valid_session(sid):
                 raise APIError(f"invalid session_id {sid}", 404)
-            if not isinstance(action_str, str):
-                raise APIError(f"action must be a space-separated string: {action_str}", 400)
-
             try:
-                action = self._parse_action_string(action_str)
+                action = self._parse_action_payload(action_payload)
             except Exception as e:
                 raise APIError(f"failed to parse action string into float list: {e}", 400)
 
@@ -251,7 +264,7 @@ class RestfulEnvWrapper(BaseDistributedEnv):
             images_b64 = self._extract_images(obs)
             return {
                 "obs": images_b64,
-                # "obs_tensor": self._tensor_to_jsonable(obs),
+                "observation": self._tensor_to_jsonable(obs),
                 "reward": reward.detach().cpu().numpy().tolist() if torch.is_tensor(reward) else reward,
                 "done": terminated.detach().cpu().numpy().tolist() if torch.is_tensor(terminated) else terminated,
                 "truncated": truncated.detach().cpu().numpy().tolist() if torch.is_tensor(truncated) else truncated,
@@ -387,6 +400,15 @@ class RestfulEnvWrapper(BaseDistributedEnv):
         """
         parts = [float(x) for x in action_str.strip().split()]
         return np.asarray(parts, dtype=np.float32)
+
+    @classmethod
+    def _parse_action_payload(cls, payload: Any) -> np.ndarray:
+        """Accept legacy text actions and JSON arrays from policy containers."""
+        if isinstance(payload, str):
+            return cls._parse_action_string(payload)
+        if isinstance(payload, (list, tuple, np.ndarray)):
+            return np.asarray(payload, dtype=np.float32)
+        raise APIError(f"action must be a space-separated string or JSON array: {payload}", 400)
 
     # ---- Tensor Translation ----
 

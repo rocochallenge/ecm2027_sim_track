@@ -37,31 +37,38 @@ class IpcDistributedEnvWrapper(BaseDistributedEnv):
         self._device = device
 
     def serve(self):
-        print(f"Waiting for connection on {self._server.listener.address}...")
+        address = self._server.listener.address
+        print(f"Waiting for connection on {address}...")
         print("Press Ctrl+C to stop the server")
 
-        while not self._shutdown_event.is_set():
-            try:
-                # Set socket to non-blocking mode temporarily to check for shutdown
-                self._server.stop_event = threading.Event()
-                self._server.listener._listener._socket.settimeout(1.0)  # 1 second timeout
-                c = self._server.listener.accept()
-                self._sock = socket.fromfd(c._handle, socket.AF_INET, socket.SOCK_STREAM)
-                # print(f"Accepted connection from {self._sock.getpeername()}")
-                self._server.listener._listener._socket.settimeout(None)  # 1 second timeout
-                self._server.handle_request(c)
-                self._sock = None
-            except socket.timeout:
-                # Timeout occurred, check if we should shutdown
-                continue
-            except OSError as e:
-                if self._shutdown_event.is_set():
-                    print("Server shutting down...")
-                    break
-                else:
-                    raise e
+        try:
+            while not self._shutdown_event.is_set():
+                try:
+                    # Set socket to non-blocking mode temporarily to check for shutdown
+                    self._server.stop_event = threading.Event()
+                    self._server.listener._listener._socket.settimeout(1.0)  # 1 second timeout
+                    c = self._server.listener.accept()
+                    self._sock = socket.fromfd(c._handle, socket.AF_INET, socket.SOCK_STREAM)
+                    # print(f"Accepted connection from {self._sock.getpeername()}")
+                    self._server.listener._listener._socket.settimeout(None)  # 1 second timeout
+                    self._server.handle_request(c)
+                    self._sock = None
+                except socket.timeout:
+                    # Timeout occurred, check if we should shutdown
+                    continue
+                except OSError as e:
+                    if self._shutdown_event.is_set():
+                        print("Server shutting down...")
+                        break
+                    else:
+                        raise e
 
-        print(f"IPC Server on {self._server.listener.address} stopped.")
+        finally:
+            # Proxy finalizers reconnect for decref after close(). A listening
+            # socket without an accept loop would leave them blocked in auth.
+            self._server.listener.close()
+
+        print(f"IPC Server on {address} stopped.")
 
     def _get_connection_sock(self, c):
         import socket
@@ -92,4 +99,9 @@ class IpcDistributedEnvWrapper(BaseDistributedEnv):
 
     def close(self):
         self._shutdown_event.set()
+        # Let serve_client return after sending the close() reply, so the main
+        # loop can close its listener before proxy finalizers reconnect.
+        stop_event = getattr(self._server, "stop_event", None)
+        if stop_event is not None:
+            stop_event.set()
         super().close()

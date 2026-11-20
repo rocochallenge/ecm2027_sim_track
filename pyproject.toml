@@ -3,13 +3,15 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "ecm2027-sim-track"
+name = "roco-chamber-service"
 version = "0.1.0"
-description = "Singapore Embodied AI Challenge for Manufacturing simulation track"
+description = "Source launchers and Chamber Service task for Isaac Lab"
 requires-python = ">=3.12,<3.13"
 dependencies = [
   "gymnasium>=1.2,<2",
+  "hydra-core>=1.3.8,<1.4",
   "numpy>=2",
+  "onnxruntime",
   "scipy",
   "PyYAML",
   "h5py",

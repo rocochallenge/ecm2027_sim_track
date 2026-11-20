@@ -1,0 +1,13 @@
+{
+  "task": "ChamberServiceTask",
+  "robot": "Galbot-Mobile",
+  "layout": "/home/pine/ecm27/ecm2027_sim_track/robofinals/data/assets/Scene/scene04_1.usd",
+  "scene_backend": "local",
+  "task_backend": "local",
+  "device": "cuda:0",
+  "num_envs": 1,
+  "seed": 42,
+  "physics_backend": "physx",
+  "enable_full_local_scene": true,
+  "replay_cfgs": {"add_camera_to_observation": true}
+}

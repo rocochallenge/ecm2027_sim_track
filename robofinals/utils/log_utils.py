@@ -572,6 +572,21 @@ def get_action_space_def(env):
         term = env.action_manager.get_term(term_name)
         term_info["action_name"] = term_name
         term_info["action_dim"] = term.action_dim
+        # A body velocity command has no one-to-one joint action mapping.
+        # Record its semantics separately instead of treating it as joint control.
+        if isinstance(term, mdp.GalbotBaseVelocityAction):
+            term_info.update({
+                "action_type": term.__class__.__name__,
+                "root_name": root_name,
+                "clip": term.cfg.clip,
+                "applied_joint_names": [],
+                "applied_joint_ids": [],
+                "action_content": ["vx", "vy", "wz"],
+                "action_units": ["m/s", "m/s", "rad/s"],
+                "command_frame": "body",
+            })
+            action_def.append(term_info)
+            continue
         term_info["applied_joint_names"] = term._joint_names
         if term._joint_ids == slice(None):
             term_info["applied_joint_ids"] = list(range(len(term._joint_names)))

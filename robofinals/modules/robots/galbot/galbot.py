@@ -17,7 +17,7 @@ from isaaclab_arena.utils.pose import Pose
 
 import robofinals.core.mdp as mdp
 import robofinals.core.mdp as mdp_isaac_lab
-from robofinals.core.mdp import ee_frame_pos, ee_frame_quat, gripper_pos
+from robofinals.core.mdp import ee_frame_pos, ee_frame_quat
 from robofinals.modules.robots.robot_arena_base import EmbodimentBasePolicyObservationCfg, LwEmbodimentBase
 from robofinals.utils.env import ExecuteMode
 from robofinals.utils.isaac_data_compat import as_torch, sim_quat_raw_to_xyzw_torch
@@ -123,7 +123,7 @@ class ActionsCfg:
 
 @configclass
 class MobileActionsCfg(ActionsCfg):
-    wheels_action: mdp.JointVelocityActionCfg = MISSING
+    base_velocity_action: mdp.GalbotBaseVelocityActionCfg = MISSING
 
 
 @configclass
@@ -133,6 +133,14 @@ class GalbotCameraCfg:
     right_hand_camera: TiledCameraCfg = None
 
 
+def galbot_gripper_positions(env):
+    """Absolute driven joint positions, ordered left then right, in radians."""
+    robot = env.scene["robot"]
+    names = robot.data.joint_names
+    indices = [names.index("left_gripper_joint"), names.index("right_gripper_joint")]
+    return as_torch(robot.data.joint_pos)[:, indices]
+
+
 @configclass
 class GalbotPolicyObservationsCfg(EmbodimentBasePolicyObservationCfg):
     actions = ObsTerm(func=mdp_isaac_lab.last_action)
@@ -140,7 +148,7 @@ class GalbotPolicyObservationsCfg(EmbodimentBasePolicyObservationCfg):
     joint_vel = ObsTerm(func=mdp_isaac_lab.joint_vel_rel)
     eef_pos = ObsTerm(func=ee_frame_pos)
     eef_quat = ObsTerm(func=ee_frame_quat)
-    gripper_pos = ObsTerm(func=gripper_pos)
+    gripper_pos = ObsTerm(func=galbot_gripper_positions)
 
     def __post_init__(self):
         self.enable_corruption = False
@@ -310,11 +318,9 @@ class GalbotEnvCfg(LwEmbodimentBase):
             close_command_expr={"right_gripper_joint": 1.703},
         )
         if mobile:
-            self.action_config.wheels_action = mdp.JointVelocityActionCfg(
+            self.action_config.base_velocity_action = mdp.GalbotBaseVelocityActionCfg(
                 asset_name="robot",
-                joint_names=GALBOT_WHEEL_JOINTS,
-                scale=0.01,
-                preserve_order=True,
+                wheel_joint_names=GALBOT_WHEEL_JOINTS,
             )
 
     def camera_viewport_prim_candidates(self) -> dict[str, tuple[str, ...]]:
@@ -410,61 +416,11 @@ class GalbotEnvCfg(LwEmbodimentBase):
             # Left stick: same remap, physical left/right is lbase[1].
             yaw = lbase[1]
 
-            # Smooth the commanded planar velocity before applying it to both
-            # wheel targets and the free root. The teleop action is sampled at
-            # control rate, while PhysX advances several smaller sub-steps.
-            try:
-                smoothing_alpha = float(
-                    os.environ.get("ROBOFINALS_GALBOT_WHEEL_SMOOTHING_ALPHA", "0.1")
-                )
-            except ValueError:
-                smoothing_alpha = 0.1
-            smoothing_alpha = min(max(smoothing_alpha, 0.0), 1.0)
-            requested_command = torch.stack([forward, lateral, yaw]).to(
+            # The action manager receives physical body-frame velocity directly.
+            base_velocity = torch.stack([forward, lateral, yaw]).to(
                 device=device.env.device, dtype=torch.float32
-            )
-            previous_command = getattr(self, "_galbot_mobile_command", None)
-            if (
-                previous_command is None
-                or previous_command.shape != requested_command.shape
-                or previous_command.device != requested_command.device
-            ):
-                previous_command = torch.zeros_like(requested_command)
-            smoothed_command = torch.lerp(previous_command, requested_command, smoothing_alpha)
-            self._galbot_mobile_command = smoothed_command
-            forward, lateral, yaw = smoothed_command.unbind()
-
-            # Omnidirectional wheel velocities stay in body frame.
-            wheel = torch.stack([
-                forward - lateral - yaw,  # wheel1
-                forward + lateral + yaw,  # wheel2
-                forward + lateral - yaw,  # wheel3
-                forward - lateral + yaw,  # wheel4
-            ]).repeat(num_envs, 1)
-
-            # Root velocity is world-frame: rotate body cmd by current root quat
-            # (Isaac Lab 3+/Newton stores root_quat_w as xyzw).
-            robot = device.env.scene.articulations.get("robot")
-            self._write_galbot_base_velocity(robot, forward, lateral, yaw, num_envs, device.env.device)
-            if (
-                robot is not None
-                and os.environ.get("ROBOFINALS_GALBOT_GRIPPER_DEBUG", "").strip().lower()
-                in {"1", "true", "yes", "on"}
-            ):
-                count = getattr(self, "_galbot_gripper_debug_count", 0)
-                try:
-                    interval = max(1, int(os.environ.get("ROBOFINALS_GALBOT_GRIPPER_DEBUG_INTERVAL", "1")))
-                except ValueError:
-                    interval = 1
-                if count % interval == 0:
-                    print(
-                        "[GalbotBaseDebug] "
-                        f"control_step={count} command_vel="
-                        f"[{float(forward):.6f}, {float(lateral):.6f}, {float(yaw):.6f}]",
-                        flush=True,
-                    )
-
-            result = torch.cat([result, wheel], dim=1)
+            ).repeat(num_envs, 1)
+            result = torch.cat([result, base_velocity], dim=1)
 
         return result
 
@@ -487,7 +443,7 @@ class GalbotEnvCfg(LwEmbodimentBase):
 
     def get_default_action(self, device: torch.device, num_envs: int) -> torch.Tensor:
         if self.mobile:
-            return torch.zeros(num_envs, 20, device=device)  # 16 (arms+grippers) + 4 (wheels)
+            return torch.zeros(num_envs, 19, device=device)  # 16 (arms+grippers) + [vx, vy, wz]
         else:
             return torch.zeros(num_envs, 16, device=device)
 
