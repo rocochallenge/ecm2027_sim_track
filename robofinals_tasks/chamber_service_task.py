@@ -19,7 +19,7 @@ from robofinals.utils.place_utils.env_utils import sample_robot_base_helper
 class ChamberServiceTaskAssets(Asset):
     """Task-local rigid objects registered before scene composition."""
 
-    SPONGE_BASE_POS = (0.37, -0.50, 0.78)
+    SPONGE_BASE_POS = (0.37, -0.50, 0.85)
     SPONGE_BASE_ROT_XYZW = (1.0, 0.0, 0.0, 0.0)
     SPONGE_POS_JITTER = 0.05
 
