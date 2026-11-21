@@ -83,6 +83,7 @@ class ChamberServiceTask(HomeBaseTask):
     """Open, extract, pack, wipe, replace, and close the chamber."""
 
     task_name = "ChamberServiceTask"
+    TABLE_PRIM_PATH = "/World/envs/env_{env_id}/Scene/Table291/Table291"
     movable_fixtures = ["Chamber002", "Chamber002_01"]
     spongebody_contact_prim_path = "{ENV_REGEX_NS}/Sponge/SpongeBody/Sponge027"
     pairwise_contacts = (("spongebody", "chamber"),)
@@ -206,8 +207,22 @@ class ChamberServiceTask(HomeBaseTask):
         self.table = self._register_fixture_by_name("table", "Table291")
         self.init_robot_base_ref = self.empty_box
 
+    def init_fixtures(self, env, env_ids=None):
+        super().init_fixtures(env, env_ids)
+        for env_id in range(env.num_envs):
+            prim_path = self.TABLE_PRIM_PATH.format(env_id=env_id)
+            table_prim = env.scene.stage.GetPrimAtPath(prim_path)
+            if not table_prim.IsValid():
+                raise RuntimeError(f"Table prim not found at {prim_path}")
+            kinematic_attr = table_prim.GetAttribute("physics:kinematicEnabled")
+            if not kinematic_attr.IsValid():
+                raise RuntimeError(f"Table prim at {prim_path} has no physics:kinematicEnabled attribute")
+            kinematic_attr.Set(True)
+
     def modify_env_cfg(self, env_cfg):
         env_cfg = super().modify_env_cfg(env_cfg)
+        if hasattr(env_cfg.scene, "Table291"):
+            env_cfg.scene.Table291 = None
         # Benchmark timeout, measured in simulation seconds.
         env_cfg.episode_length_s = 15.0 * 60.0
         # env_cfg.viewer.eye = (2.6, -3.0, 2.1)
