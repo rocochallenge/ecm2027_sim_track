@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 
 DEFAULTS = {
-    "scene_backend": "local", "task_backend": "local", "device": "cuda:0",
+    "scene_backend": "local", "task_backend": "local", "device": "cpu",
     "robot_scale": 1.0, "first_person_view": False, "disable_fabric": False,
     "num_envs": 1, "usd_simplify": False, "video": False, "for_rl": False,
     "variant": "Visual", "concatenate_terms": False, "distributed": False,
