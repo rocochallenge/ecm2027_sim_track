@@ -7,6 +7,7 @@ from robofinals_tasks.lightwheel_home_tasks.home_base_task import HomeBaseTask
 
 
 class ChamberTableKinematicTests(unittest.TestCase):
+    @patch.object(ChamberServiceTask, "KEEP_TABLE_STATIC", True)
     @patch.object(HomeBaseTask, "init_fixtures")
     def test_init_fixtures_sets_every_table_kinematic(self, super_init):
         attrs = []
@@ -33,6 +34,7 @@ class ChamberTableKinematicTests(unittest.TestCase):
         for attr in attrs:
             attr.Set.assert_called_once_with(True)
 
+    @patch.object(ChamberServiceTask, "KEEP_TABLE_STATIC", True)
     @patch.object(HomeBaseTask, "modify_env_cfg")
     def test_modify_env_cfg_removes_table_from_generic_resets(self, super_modify):
         env_cfg = SimpleNamespace(

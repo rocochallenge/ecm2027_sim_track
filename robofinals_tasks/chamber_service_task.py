@@ -12,8 +12,6 @@ from robofinals.data import robofinals_DATA_PATH
 import robofinals.utils.object_utils as OU
 from robofinals_tasks.lightwheel_home_tasks.home_base_task import HomeBaseTask
 from robofinals.core.models.fixtures.fixture_types import FixtureType
-from robofinals.utils.env import ExecuteMode
-from robofinals.utils.place_utils.env_utils import sample_robot_base_helper
 
 
 class ChamberServiceTaskAssets(Asset):
@@ -84,6 +82,10 @@ class ChamberServiceTask(HomeBaseTask):
 
     task_name = "ChamberServiceTask"
     TABLE_PRIM_PATH = "/World/envs/env_{env_id}/Scene/Table291/Table291"
+    # Table fix for GPU physics (device cuda:0), where the dynamic table drifts and
+    # the sponge slides with it. Not needed with the default cpu physics, so it is
+    # kept but disabled: the table stays a movable body as in data collection.
+    KEEP_TABLE_STATIC = False
     movable_fixtures = ["Chamber002", "Chamber002_01"]
     spongebody_contact_prim_path = "{ENV_REGEX_NS}/Sponge/SpongeBody/Sponge027"
     pairwise_contacts = (("spongebody", "chamber"),)
@@ -138,11 +140,14 @@ class ChamberServiceTask(HomeBaseTask):
     WIPE_FACE_OUTSIDE_TOLERANCE_M = 0.01
     WIPE_FACE_NAMES = ("wall_x_neg", "wall_x_pos", "wall_y_neg", "wall_y_pos", "floor")
     SPONGE_CHAMBER_CONTACTS_REQUIRED = 5  # number of cavity faces
+    # Reset anchor of the robot base: the initial base pose recorded in the released
+    # demonstrations (x, y, z in metres; roll, pitch, yaw in radians).
+    ROBOT_RESET_ANCHOR_POS = (0.40, -0.85, 0.0)
+    ROBOT_RESET_ANCHOR_ORI = (0.0, 0.0, 1.5707963267948966)
     ROBOT_RESET_POS_DEV_X = 0.10
     ROBOT_RESET_POS_DEV_Y = 0.10
-    # About +/- 29 degrees, large enough to be visible while keeping the
-    # robot facing the same work area.
-    ROBOT_RESET_YAW_DEV = 0.50
+    # +/- 10 degrees around the anchor heading.
+    ROBOT_RESET_YAW_DEV = 0.17453292519943295
 
     POINT_NAMES = (
         "1a_lid_lifted_1cm",
@@ -209,6 +214,8 @@ class ChamberServiceTask(HomeBaseTask):
 
     def init_fixtures(self, env, env_ids=None):
         super().init_fixtures(env, env_ids)
+        if not self.KEEP_TABLE_STATIC:
+            return
         for env_id in range(env.num_envs):
             prim_path = self.TABLE_PRIM_PATH.format(env_id=env_id)
             table_prim = env.scene.stage.GetPrimAtPath(prim_path)
@@ -221,7 +228,7 @@ class ChamberServiceTask(HomeBaseTask):
 
     def modify_env_cfg(self, env_cfg):
         env_cfg = super().modify_env_cfg(env_cfg)
-        if hasattr(env_cfg.scene, "Table291"):
+        if self.KEEP_TABLE_STATIC and hasattr(env_cfg.scene, "Table291"):
             env_cfg.scene.Table291 = None
         # Benchmark timeout, measured in simulation seconds.
         env_cfg.episode_length_s = 15.0 * 60.0
@@ -258,30 +265,26 @@ class ChamberServiceTask(HomeBaseTask):
         return result
 
     def sample_robot_base_reset_pose(self, env, env_ids, orchestrator):
-        """Return a collision-free random base pose around the task anchor."""
+        """Return a random base pose within the reset deviation around the task anchor."""
         anchor_pos = np.asarray(
             self.init_robot_base_pos
             if self.init_robot_base_pos is not None
-            else orchestrator.embodiment.init_robot_base_pos_anchor,
+            else self.ROBOT_RESET_ANCHOR_POS,
             dtype=np.float32,
         )
         anchor_ori = np.asarray(
             self.init_robot_base_ori
             if self.init_robot_base_ori is not None
-            else orchestrator.embodiment.init_robot_base_ori_anchor,
+            else self.ROBOT_RESET_ANCHOR_ORI,
             dtype=np.float32,
         )
-        robot_pos = sample_robot_base_helper(
-            env=env,
-            anchor_pos=anchor_pos,
-            anchor_ori=anchor_ori,
-            rot_dev=self.ROBOT_RESET_YAW_DEV,
-            pos_dev_x=self.ROBOT_RESET_POS_DEV_X,
-            pos_dev_y=self.ROBOT_RESET_POS_DEV_Y,
-            env_ids=env_ids,
-            # The helper intentionally fixes EVAL poses for generic tasks. This
-            # task requires eval and data collection to share the distribution.
-            execute_mode=ExecuteMode.TELEOP,
+        # Offset the anchor directly. The shared helper rejects poses whose bounding
+        # box overlaps a fixture and widens the range until one fits, which puts the
+        # robot far outside the deviation for this anchor.
+        robot_pos = anchor_pos.copy()
+        robot_pos[:2] += self.rng.uniform(
+            low=(-self.ROBOT_RESET_POS_DEV_X, -self.ROBOT_RESET_POS_DEV_Y),
+            high=(self.ROBOT_RESET_POS_DEV_X, self.ROBOT_RESET_POS_DEV_Y),
         )
         robot_ori = anchor_ori.copy()
         robot_ori[2] += float(self.rng.uniform(-self.ROBOT_RESET_YAW_DEV, self.ROBOT_RESET_YAW_DEV))
