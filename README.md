@@ -179,3 +179,14 @@ The default recording is `recordings/galbot.hdf5`. Replay a recording and check 
 ```
 
 Use `joint_target` in place of `action` for joint-target recordings. Replay results are written beside the recording. Run each launcher with `--help` for its options.
+
+To keep a recorded state trajectory and regenerate its camera images with a new background:
+
+```bash
+./scripts/run_rerender.sh \
+  --dataset_file /absolute/path/to/recording.hdf5 \
+  --layout "$PWD/robofinals/data/assets/SceneWithBackgroud/scene04_1.usd" \
+  --enable_full_local_scene
+```
+
+This writes `dataset_with_video.hdf5` and a timestamped MP4 beside the input. The input remains unchanged; an existing output HDF5 is overwritten. Only the highest-numbered episode is rerendered. See [background rerendering instructions](docs/CHAMBER_BACKGROUND_RERENDER.md) for memory behavior, output details and validation.
